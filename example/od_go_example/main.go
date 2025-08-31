@@ -15,5 +15,5 @@ func main() {
 		fmt.Println("7 is odd")
 	}
 	greetings.Hello("Okerew")
-	fmt.Println(slice[10]) // Panic: index out of range - line 8
+	fmt.Println(slice[10]) // Panic: index out of range - line 10
 }
