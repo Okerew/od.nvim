@@ -18,9 +18,6 @@ Plug 'Okerew/od.nvim'
 **C/Cpp:**
 gcc, gdb, valgrind, cmake
 
-**Rust**
-clippy, cargo
-
 **Go**:
 delve
 
