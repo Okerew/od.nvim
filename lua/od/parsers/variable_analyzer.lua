@@ -12,7 +12,6 @@ function M.analyze_suspicious_patterns(output)
 			"0xffffffffffffffff",
 			"0x7fffffff",
 			"0x80000000",
-			-- EXPANDED:
 			"4294967296",
 			"18446744073709551616",
 			"2147483648",
@@ -78,7 +77,6 @@ function M.analyze_suspicious_patterns(output)
 			"0xcdcdcdcd",
 			"0xabababab",
 			"0x12345678",
-			-- EXPANDED:
 			"0xcccccccccccccccc",
 			"0xdeadbeefdeadbeef",
 			"0xbaadf00dbaadf00d",
@@ -118,7 +116,6 @@ function M.analyze_suspicious_patterns(output)
 			"Inf",
 			"inf",
 			"nan",
-			-- EXPANDED:
 			"NAN",
 			"+INF",
 			"-INF",
@@ -151,7 +148,6 @@ function M.analyze_suspicious_patterns(output)
 		memory_leak = {
 			"leaked",
 			"not.*freed",
-			-- EXPANDED:
 			"memory.*leak",
 			"heap.*leak",
 			"still.*reachable",
@@ -174,7 +170,6 @@ function M.analyze_suspicious_patterns(output)
 			"buffer overflow",
 			"stack smashing",
 			"heap corruption",
-			-- EXPANDED:
 			"stack.*overflow",
 			"heap.*overflow",
 			"buffer.*overrun",
@@ -199,7 +194,6 @@ function M.analyze_suspicious_patterns(output)
 			"heap.*buffer.*overflow",
 			"stack.*buffer.*overflow",
 		},
-		-- NEW PATTERN CATEGORIES:
 		format_string = {
 			"%s%s%s%s",
 			"%d%d%d%d",
