@@ -58,7 +58,6 @@ function M.analyze_suspicious_patterns(output)
 			"NULL",
 			"(null)",
 			"nullptr",
-			-- EXPANDED:
 			"0x00000000",
 			"0x0000000000000000",
 			"0000:0000",
@@ -712,6 +711,286 @@ function M.analyze_suspicious_patterns(output)
 				"([%a_][%w_]*%.[%a_][%w_]*)%s*=%s*([^;,\n=!<>]+)",
 			},
 		},
+		lua = {
+			comment_patterns = { "%-%-.*", "%-%-[%[=*[%[].*]]=*]" },
+			keywords = {
+				["and"] = true,
+				["break"] = true,
+				["do"] = true,
+				["else"] = true,
+				["elseif"] = true,
+				["end"] = true,
+				["false"] = true,
+				["for"] = true,
+				["function"] = true,
+				["goto"] = true,
+				["if"] = true,
+				["in"] = true,
+				["local"] = true,
+				["nil"] = true,
+				["not"] = true,
+				["or"] = true,
+				["repeat"] = true,
+				["return"] = true,
+				["then"] = true,
+				["true"] = true,
+				["until"] = true,
+				["while"] = true,
+				["require"] = true,
+				["module"] = true,
+				["package"] = true,
+				["pairs"] = true,
+				["ipairs"] = true,
+				["next"] = true,
+				["type"] = true,
+				["getmetatable"] = true,
+				["setmetatable"] = true,
+				["rawget"] = true,
+				["rawset"] = true,
+				["rawlen"] = true,
+				["tostring"] = true,
+				["tonumber"] = true,
+				["print"] = true,
+				["error"] = true,
+				["assert"] = true,
+				["pcall"] = true,
+				["xpcall"] = true,
+				["load"] = true,
+				["loadfile"] = true,
+				["dofile"] = true,
+				["string"] = true,
+				["table"] = true,
+				["math"] = true,
+				["io"] = true,
+				["os"] = true,
+				["coroutine"] = true,
+				["debug"] = true,
+			},
+			assignment_patterns = {
+				"local%s+([%a_][%w_]*)%s*=%s*([^,\n]+)",
+				"([%a_][%w_]*)%s*=%s*([^,\n]+)",
+				"([%a_][%w_]*%s*%[[^%]]*%])%s*=%s*([^,\n]+)",
+				"([%a_][%w_]*%.[%a_][%w_]*)%s*=%s*([^,\n]+)",
+				"local%s+([%a_][%w_]*)%s*,%s*([%a_][%w_]*)%s*=%s*([^,\n]+)",
+				"([%a_][%w_]*)%s*,%s*([%a_][%w_]*)%s*=%s*([^,\n]+)",
+				-- Table assignments
+				"([%a_][%w_]*)%s*%[%s*['\"]([^'\"]+)['\"]%s*%]%s*=%s*([^,\n]+)",
+				"([%a_][%w_]*)%s*%[%s*(%d+)%s*%]%s*=%s*([^,\n]+)",
+				-- Multiple assignments
+				"local%s+([%a_][%w_]*)%s*,%s*([%a_][%w_]*)%s*,%s*([%a_][%w_]*)%s*=%s*([^,\n]+)",
+				"([%a_][%w_]*)%s*,%s*([%a_][%w_]*)%s*,%s*([%a_][%w_]*)%s*=%s*([^,\n]+)",
+			},
+		},
+		python = {
+			comment_patterns = { "#.*", "['\"]%[%[.*%]%]['\"]", '""".*"""', "'''.*'''" },
+			keywords = {
+				["False"] = true,
+				["None"] = true,
+				["True"] = true,
+				["and"] = true,
+				["as"] = true,
+				["assert"] = true,
+				["break"] = true,
+				["class"] = true,
+				["continue"] = true,
+				["def"] = true,
+				["del"] = true,
+				["elif"] = true,
+				["else"] = true,
+				["except"] = true,
+				["finally"] = true,
+				["for"] = true,
+				["from"] = true,
+				["global"] = true,
+				["if"] = true,
+				["import"] = true,
+				["in"] = true,
+				["is"] = true,
+				["lambda"] = true,
+				["nonlocal"] = true,
+				["not"] = true,
+				["or"] = true,
+				["pass"] = true,
+				["raise"] = true,
+				["return"] = true,
+				["try"] = true,
+				["while"] = true,
+				["with"] = true,
+				["yield"] = true,
+				["async"] = true,
+				["await"] = true,
+				["print"] = true,
+				["len"] = true,
+				["range"] = true,
+				["enumerate"] = true,
+				["zip"] = true,
+				["map"] = true,
+				["filter"] = true,
+				["sorted"] = true,
+				["reversed"] = true,
+				["sum"] = true,
+				["max"] = true,
+				["min"] = true,
+				["abs"] = true,
+				["round"] = true,
+				["type"] = true,
+				["isinstance"] = true,
+				["hasattr"] = true,
+				["getattr"] = true,
+				["setattr"] = true,
+				["str"] = true,
+				["int"] = true,
+				["float"] = true,
+				["bool"] = true,
+				["list"] = true,
+				["dict"] = true,
+				["tuple"] = true,
+				["set"] = true,
+			},
+			assignment_patterns = {
+				"([%a_][%w_]*)%s*=%s*([^=\n]+)",
+				"([%a_][%w_]*%s*%[[^%]]*%])%s*=%s*([^=\n]+)",
+				"([%a_][%w_]*%.[%a_][%w_]*)%s*=%s*([^=\n]+)",
+				"([%a_][%w_]*)%s*,%s*([%a_][%w_]*)%s*=%s*([^=\n]+)",
+				"([%a_][%w_]*)%s*,%s*([%a_][%w_]*)%s*,%s*([%a_][%w_]*)%s*=%s*([^=\n]+)",
+				-- Augmented assignments
+				"([%a_][%w_]*)%s*%+=%s*([^=\n]+)",
+				"([%a_][%w_]*)%s*%-=%s*([^=\n]+)",
+				"([%a_][%w_]*)%s*%*=%s*([^=\n]+)",
+				"([%a_][%w_]*)%s*/=%s*([^=\n]+)",
+				"([%a_][%w_]*)%s*//=%s*([^=\n]+)",
+				"([%a_][%w_]*)%s*%%=%s*([^=\n]+)",
+				"([%a_][%w_]*)%s*%*%*=%s*([^=\n]+)",
+				"([%a_][%w_]*)%s*&=%s*([^=\n]+)",
+				"([%a_][%w_]*)%s*|=%s*([^=\n]+)",
+				"([%a_][%w_]*)%s*%^=%s*([^=\n]+)",
+				"([%a_][%w_]*)%s*<<=%s*([^=\n]+)",
+				"([%a_][%w_]*)%s*>>=%s*([^=\n]+)",
+				-- Dictionary/list assignments
+				"([%a_][%w_]*)%s*%[%s*['\"]([^'\"]+)['\"]%s*%]%s*=%s*([^=\n]+)",
+				"([%a_][%w_]*)%s*%[%s*(%d+)%s*%]%s*=%s*([^=\n]+)",
+				"([%a_][%w_]*)%s*%[%s*([%a_][%w_]*)%s*%]%s*=%s*([^=\n]+)",
+				-- Slice assignments
+				"([%a_][%w_]*)%s*%[%s*([^:]*):([^%]]*)%s*%]%s*=%s*([^=\n]+)",
+			},
+		},
+		javascript = {
+			comment_patterns = { "//.*", "/%*.*%*/" },
+			keywords = {
+				["break"] = true,
+				["case"] = true,
+				["catch"] = true,
+				["class"] = true,
+				["const"] = true,
+				["continue"] = true,
+				["debugger"] = true,
+				["default"] = true,
+				["delete"] = true,
+				["do"] = true,
+				["else"] = true,
+				["enum"] = true,
+				["export"] = true,
+				["extends"] = true,
+				["false"] = true,
+				["finally"] = true,
+				["for"] = true,
+				["function"] = true,
+				["if"] = true,
+				["import"] = true,
+				["in"] = true,
+				["instanceof"] = true,
+				["let"] = true,
+				["new"] = true,
+				["null"] = true,
+				["return"] = true,
+				["super"] = true,
+				["switch"] = true,
+				["this"] = true,
+				["throw"] = true,
+				["true"] = true,
+				["try"] = true,
+				["typeof"] = true,
+				["undefined"] = true,
+				["var"] = true,
+				["void"] = true,
+				["while"] = true,
+				["with"] = true,
+				["yield"] = true,
+				["async"] = true,
+				["await"] = true,
+				["of"] = true,
+				["static"] = true,
+				["get"] = true,
+				["set"] = true,
+				["console"] = true,
+				["log"] = true,
+				["error"] = true,
+				["warn"] = true,
+				["info"] = true,
+				["Array"] = true,
+				["Object"] = true,
+				["String"] = true,
+				["Number"] = true,
+				["Boolean"] = true,
+				["Date"] = true,
+				["Math"] = true,
+				["JSON"] = true,
+				["Promise"] = true,
+				["Symbol"] = true,
+				["Map"] = true,
+				["Set"] = true,
+				["WeakMap"] = true,
+				["WeakSet"] = true,
+				["RegExp"] = true,
+				["Error"] = true,
+			},
+			assignment_patterns = {
+				"var%s+([%a_$][%w_$]*)%s*=%s*([^;,\n=!<>]+)",
+				"let%s+([%a_$][%w_$]*)%s*=%s*([^;,\n=!<>]+)",
+				"const%s+([%a_$][%w_$]*)%s*=%s*([^;,\n=!<>]+)",
+				"([%a_$][%w_$]*)%s*=%s*([^;,\n=!<>]+)",
+				"([%a_$][%w_$]*%s*%[[^%]]*%])%s*=%s*([^;,\n=!<>]+)",
+				"([%a_$][%w_$]*%.[%a_$][%w_$]*)%s*=%s*([^;,\n=!<>]+)",
+				-- Object destructuring
+				"const%s+{%s*([%a_$][%w_$]*)%s*}%s*=%s*([^;,\n=!<>]+)",
+				"let%s+{%s*([%a_$][%w_$]*)%s*}%s*=%s*([^;,\n=!<>]+)",
+				"var%s+{%s*([%a_$][%w_$]*)%s*}%s*=%s*([^;,\n=!<>]+)",
+				-- Array destructuring
+				"const%s+%[%s*([%a_$][%w_$]*)%s*%]%s*=%s*([^;,\n=!<>]+)",
+				"let%s+%[%s*([%a_$][%w_$]*)%s*%]%s*=%s*([^;,\n=!<>]+)",
+				"var%s+%[%s*([%a_$][%w_$]*)%s*%]%s*=%s*([^;,\n=!<>]+)",
+				-- Multiple declarations
+				"var%s+([%a_$][%w_$]*)%s*,%s*([%a_$][%w_$]*)%s*=%s*([^;,\n=!<>]+)",
+				"let%s+([%a_$][%w_$]*)%s*,%s*([%a_$][%w_$]*)%s*=%s*([^;,\n=!<>]+)",
+				"const%s+([%a_$][%w_$]*)%s*,%s*([%a_$][%w_$]*)%s*=%s*([^;,\n=!<>]+)",
+				-- Compound operators
+				"([%a_$][%w_$]*)%s*%+=%s*([^;,\n=!<>]+)",
+				"([%a_$][%w_$]*)%s*%-=%s*([^;,\n=!<>]+)",
+				"([%a_$][%w_$]*)%s*%*=%s*([^;,\n=!<>]+)",
+				"([%a_$][%w_$]*)%s*/=%s*([^;,\n=!<>]+)",
+				"([%a_$][%w_$]*)%s*%%=%s*([^;,\n=!<>]+)",
+				"([%a_$][%w_$]*)%s*%*%*=%s*([^;,\n=!<>]+)",
+				"([%a_$][%w_$]*)%s*&=%s*([^;,\n=!<>]+)",
+				"([%a_$][%w_$]*)%s*|=%s*([^;,\n=!<>]+)",
+				"([%a_$][%w_$]*)%s*%^=%s*([^;,\n=!<>]+)",
+				"([%a_$][%w_$]*)%s*<<=%s*([^;,\n=!<>]+)",
+				"([%a_$][%w_$]*)%s*>>=%s*([^;,\n=!<>]+)",
+				"([%a_$][%w_$]*)%s*>>>=%s*([^;,\n=!<>]+)",
+				"([%a_$][%w_$]*)%s*&&=%s*([^;,\n=!<>]+)",
+				"([%a_$][%w_$]*)%s*||=%s*([^;,\n=!<>]+)",
+				"([%a_$][%w_$]*)%s*%?%?=%s*([^;,\n=!<>]+)",
+				-- Increment/decrement
+				"(%+%+[%a_$][%w_$]*)",
+				"([%a_$][%w_$]*%+%+)",
+				"(%-%-[%a_$][%w_$]*)",
+				"([%a_$][%w_$]*%-%-)",
+				-- Arrow function assignments
+				"const%s+([%a_$][%w_$]*)%s*=%s*%(.*%)%s*=>",
+				"let%s+([%a_$][%w_$]*)%s*=%s*%(.*%)%s*=>",
+				"var%s+([%a_$][%w_$]*)%s*=%s*%(.*%)%s*=>",
+				"([%a_$][%w_$]*)%s*=%s*%(.*%)%s*=>",
+			},
+		},
 	}
 
 	local function detect_language()
@@ -726,6 +1005,17 @@ function M.analyze_suspicious_patterns(output)
 			return "rust"
 		elseif ext == "go" then
 			return "go"
+		elseif ext == "python" then
+			return "python"
+		elseif ext == "lua" then
+			return "lua"
+		elseif
+			ext == "javascript"
+			and ext == "typescript"
+			and ext == "typescriptreact"
+			and ext == "javascriptreact"
+		then
+			return "javascript"
 		else
 			return "c" -- default fallback
 		end
@@ -896,7 +1186,7 @@ function M.analyze_suspicious_patterns(output)
 			"^%s*#%s*warning%s+",
 			"^%s*#%s*region",
 			"^%s*#%s*endregion",
-			-- Advanced Rust patterns
+			-- Rust patterns
 			"^%s*unsafe%s*{",
 			'^%s*extern%s+"C"%s*{',
 			"^%s*mod%s+[%a_][%w_]*%s*{",
@@ -907,7 +1197,7 @@ function M.analyze_suspicious_patterns(output)
 			"^%s*#%s*%[%s*warn",
 			"^%s*#%s*%[%s*deny",
 			"^%s*#%s*%[%s*forbid",
-			-- Advanced Go patterns
+			-- Go patterns
 			"^%s*go%s+func%s*%(",
 			"^%s*defer%s+[%a_]",
 			"^%s*select%s*{",
@@ -940,16 +1230,26 @@ function M.analyze_suspicious_patterns(output)
 		if not name or name == "" then
 			return false
 		end
-
-		-- Must start with letter or underscore
-		if not name:match("^[%a_]") then
+		-- Must start with letter or underscore ($ allowed in JavaScript)
+		local start_pattern = "^[%a_]"
+		if current_lang == "javascript" then
+			start_pattern = "^[%a_$]"
+		end
+		if not name:match(start_pattern) then
 			return false
 		end
+		-- Must only contain valid identifier characters
+		local valid_pattern = "^[%a_][%w_]*$"
+		if current_lang == "javascript" then
+			valid_pattern = "^[%a_$][%w_$]*$"
+		elseif current_lang == "python" then
+			-- Python allows underscores at start
+			valid_pattern = "^[%a_][%w_]*$"
+		end
 
-		-- Must only contain alphanumeric and underscores (basic check)
-		if not name:match("^[%a_][%w_]*$") then
+		if not name:match(valid_pattern) then
 			-- Allow some special cases for specific contexts
-			if context ~= "array_access" and context ~= "member_access" then
+			if context ~= "array_access" and context ~= "member_access" and context ~= "object_key" then
 				return false
 			end
 		end
@@ -959,13 +1259,11 @@ function M.analyze_suspicious_patterns(output)
 			return false
 		end
 
-		-- EXPANDED: Skip common non-variable patterns
 		local non_variable_patterns = {
 			"^%d+$", -- pure numbers
 			"^0x[%da-fA-F]+$", -- hex numbers
 			"^%d+%.%d+$", -- floating point numbers
 			"^%d+[uUlLfF]+$", -- number suffixes
-			-- EXPANDED PATTERNS:
 			"^%d+%.%d+[fFlL]$", -- float literals with suffixes
 			"^0[0-7]+$", -- octal numbers
 			"^0b[01]+$", -- binary numbers
@@ -991,12 +1289,42 @@ function M.analyze_suspicious_patterns(output)
 			"^FAILURE$",
 		}
 
+		-- Language-specific non-variable patterns
+		if current_lang == "python" then
+			local python_patterns = {
+				"^%d+j$", -- complex numbers (e.g., 5j)
+				"^%d+%.%d+j$", -- complex floats
+				"^__[%w_]*__$", -- dunder methods (but some might be valid variables)
+			}
+			for _, pattern in ipairs(python_patterns) do
+				table.insert(non_variable_patterns, pattern)
+			end
+		elseif current_lang == "javascript" then
+			local js_patterns = {
+				"^Infinity$",
+				"^NaN$",
+				"^%d+n$", -- BigInt literals
+			}
+			for _, pattern in ipairs(js_patterns) do
+				table.insert(non_variable_patterns, pattern)
+			end
+		elseif current_lang == "lua" then
+			local lua_patterns = {
+				"^%d+ULL$", -- Lua number suffixes
+				"^%d+LL$",
+			}
+			for _, pattern in ipairs(lua_patterns) do
+				table.insert(non_variable_patterns, pattern)
+			end
+		end
+
 		for _, pattern in ipairs(non_variable_patterns) do
 			if name:match(pattern) then
 				return false
 			end
 		end
 
+		-- Language-specific validation
 		if current_lang == "rust" then
 			-- Rust allows more characters in variable names in some contexts
 			if name:match("^r#") then -- raw identifiers
@@ -1020,10 +1348,25 @@ function M.analyze_suspicious_patterns(output)
 			if context == "template" and name:match("^[%a_][%w_]*$") then
 				return true
 			end
+		elseif current_lang == "python" then
+			-- Python allows leading underscores
+			if name:match("^_+[%w_]*$") then
+				return true
+			end
+		elseif current_lang == "javascript" then
+			-- JavaScript allows $ in identifiers
+			if not name:match("^[%a_$][%w_$]*$") then
+				return false
+			end
+		elseif current_lang == "lua" then
+			-- Lua standard identifier rules
+			if not name:match("^[%a_][%w_]*$") then
+				return false
+			end
 		end
 
 		-- Skip extremely short names that are likely not meaningful variables
-		if #name < 2 and name ~= "_" then
+		if #name < 2 and name ~= "_" and name ~= "$" then
 			return false
 		end
 
@@ -1063,7 +1406,13 @@ function M.analyze_suspicious_patterns(output)
 			return vars
 		end
 
-		-- EXPANDED: Remove string literals from expression before processing
+		-- Language-specific string literal handling
+		if current_lang == "python" and (cleaned_expr:match('""".*"""') or cleaned_expr:match("'''.*'''")) then
+			return vars
+		elseif current_lang == "javascript" and cleaned_expr:match("`[^`]*`") then
+			return vars
+		end
+
 		local expr_no_strings = cleaned_expr
 		-- Remove double-quoted strings
 		expr_no_strings = expr_no_strings:gsub('"[^"]*"', '""')
@@ -1072,59 +1421,94 @@ function M.analyze_suspicious_patterns(output)
 		-- Remove character literals
 		expr_no_strings = expr_no_strings:gsub("'\\?.'", "''")
 
-		-- EXPANDED: Extract different types of variable references
+		-- Language-specific string removal
+		if current_lang == "python" then
+			-- Remove triple quotes
+			expr_no_strings = expr_no_strings:gsub('"""[^"]*"""', '""')
+			expr_no_strings = expr_no_strings:gsub("'''[^']*'''", "''")
+			-- Remove raw strings
+			expr_no_strings = expr_no_strings:gsub('r"[^"]*"', '""')
+			expr_no_strings = expr_no_strings:gsub("r'[^']*'", "''")
+		elseif current_lang == "javascript" then
+			-- Remove template literals
+			expr_no_strings = expr_no_strings:gsub("`[^`]*`", '""')
+		end
+
+		-- Set variable pattern based on language
+		local var_pattern = "[%a_][%w_]*"
+		if current_lang == "javascript" then
+			var_pattern = "[%a_$][%w_$]*"
+		end
+
 		-- 1. Simple variable names
-		for token in expr_no_strings:gmatch("[%a_][%w_]*") do
+		for token in expr_no_strings:gmatch(var_pattern) do
 			if is_valid_variable(token) then
 				vars[token] = { type = "simple", context = "variable" }
 			end
 		end
 
-		-- 2. Array access variables
-		for array_expr in expr_no_strings:gmatch("([%a_][%w_]*)%s*%[") do
+		-- 2. Array/object access variables
+		for array_expr in expr_no_strings:gmatch("(" .. var_pattern .. ")%s*%[") do
 			if is_valid_variable(array_expr, "array_access") then
 				vars[array_expr] = { type = "array", context = "array_base" }
 			end
 		end
 
-		-- 3. Struct/class member access
-		for base, member in expr_no_strings:gmatch("([%a_][%w_]*)%.([%a_][%w_]*)") do
+		-- 3. Object member access (dot notation)
+		local member_pattern = "(" .. var_pattern .. ")%.(" .. var_pattern .. ")"
+		for base, member in expr_no_strings:gmatch(member_pattern) do
 			if is_valid_variable(base) then
-				vars[base] = { type = "struct", context = "base_object" }
+				vars[base] = { type = "object", context = "base_object" }
 			end
 			if is_valid_variable(member, "member_access") then
 				vars[member] = { type = "member", context = "member_field" }
 			end
 		end
 
-		-- 4. Pointer member access
-		for base, member in expr_no_strings:gmatch("([%a_][%w_]*)%->([%a_][%w_]*)") do
-			if is_valid_variable(base) then
-				vars[base] = { type = "pointer", context = "pointer_base" }
-			end
-			if is_valid_variable(member, "member_access") then
-				vars[member] = { type = "member", context = "pointed_member" }
+		-- 4. Language-specific member access patterns
+		if current_lang == "c" or current_lang == "cpp" then
+			-- Pointer member access
+			for base, member in expr_no_strings:gmatch("([%a_][%w_]*)%->([%a_][%w_]*)") do
+				if is_valid_variable(base) then
+					vars[base] = { type = "pointer", context = "pointer_base" }
+				end
+				if is_valid_variable(member, "member_access") then
+					vars[member] = { type = "member", context = "pointed_member" }
+				end
 			end
 		end
 
 		-- 5. Function call results (but not the function name itself in some contexts)
-		for func_name in expr_no_strings:gmatch("([%a_][%w_]*)%s*%([^%)]*%)") do
+		local func_pattern = "(" .. var_pattern .. ")%s*%([^%)]*%)"
+		for func_name in expr_no_strings:gmatch(func_pattern) do
 			if is_valid_variable(func_name) and not lang_cfg.keywords[func_name] then
 				vars[func_name] = { type = "function", context = "function_call" }
 			end
 		end
 
-		-- 6. Dereferenced pointers
-		for ptr_var in expr_no_strings:gmatch("%*+%s*([%a_][%w_]*)") do
-			if is_valid_variable(ptr_var) then
-				vars[ptr_var] = { type = "dereference", context = "dereferenced_pointer" }
+		-- 6. Language-specific function patterns
+		if current_lang == "rust" then
+			-- Rust macro calls
+			for macro_name in expr_no_strings:gmatch("([%a_][%w_]*)!%s*%([^)]*%)") do
+				if is_valid_variable(macro_name) then
+					vars[macro_name] = { type = "macro", context = "macro_call" }
+				end
 			end
 		end
 
-		-- 7. Address-of operations
-		for addr_var in expr_no_strings:gmatch("&%s*([%a_][%w_]*)") do
-			if is_valid_variable(addr_var) then
-				vars[addr_var] = { type = "address", context = "address_taken" }
+		-- 7. Pointer operations (C/C++/Rust)
+		if current_lang == "c" or current_lang == "cpp" or current_lang == "rust" then
+			-- Dereferenced pointers
+			for ptr_var in expr_no_strings:gmatch("%*+%s*([%a_][%w_]*)") do
+				if is_valid_variable(ptr_var) then
+					vars[ptr_var] = { type = "dereference", context = "dereferenced_pointer" }
+				end
+			end
+			-- Address-of operations
+			for addr_var in expr_no_strings:gmatch("&%s*([%a_][%w_]*)") do
+				if is_valid_variable(addr_var) then
+					vars[addr_var] = { type = "address", context = "address_taken" }
+				end
 			end
 		end
 
@@ -1174,6 +1558,87 @@ function M.analyze_suspicious_patterns(output)
 					vars[item] = { type = "package_item", context = "package_member" }
 				end
 			end
+		elseif current_lang == "python" then
+			-- Module/class attribute access
+			for module, attr in expr_no_strings:gmatch("([%a_][%w_]*)%.([%a_][%w_]*)") do
+				if is_valid_variable(module) and not lang_cfg.keywords[module] then
+					vars[module] = { type = "module", context = "module_qualifier" }
+				end
+				if is_valid_variable(attr) then
+					vars[attr] = { type = "attribute", context = "attribute_access" }
+				end
+			end
+
+			-- List comprehensions and generator expressions
+			for var in expr_no_strings:gmatch("for%s+([%a_][%w_]*)%s+in") do
+				if is_valid_variable(var) then
+					vars[var] = { type = "iterator", context = "comprehension_variable" }
+				end
+			end
+
+			-- Dictionary key access with variables
+			for dict_var, key_var in expr_no_strings:gmatch("([%a_][%w_]*)%[([%a_][%w_]*)%]") do
+				if is_valid_variable(dict_var) then
+					vars[dict_var] = { type = "dict", context = "dictionary_base" }
+				end
+				if is_valid_variable(key_var) then
+					vars[key_var] = { type = "key", context = "dictionary_key" }
+				end
+			end
+		elseif current_lang == "javascript" then
+			-- Object property access
+			for obj, prop in expr_no_strings:gmatch("([%a_$][%w_$]*)%.([%a_$][%w_$]*)") do
+				if is_valid_variable(obj) and not lang_cfg.keywords[obj] then
+					vars[obj] = { type = "object", context = "object_base" }
+				end
+				if is_valid_variable(prop) then
+					vars[prop] = { type = "property", context = "object_property" }
+				end
+			end
+
+			-- Array/object bracket access
+			for obj, key in expr_no_strings:gmatch("([%a_$][%w_$]*)%[([%a_$][%w_$]*)%]") do
+				if is_valid_variable(obj) then
+					vars[obj] = { type = "object", context = "indexed_object" }
+				end
+				if is_valid_variable(key) then
+					vars[key] = { type = "key", context = "index_key" }
+				end
+			end
+
+			-- Arrow function parameters (basic detection)
+			for param in expr_no_strings:gmatch("([%a_$][%w_$]*)%s*=>") do
+				if is_valid_variable(param) then
+					vars[param] = { type = "parameter", context = "arrow_function_param" }
+				end
+			end
+		elseif current_lang == "lua" then
+			-- Table field access
+			for table_var, field in expr_no_strings:gmatch("([%a_][%w_]*)%.([%a_][%w_]*)") do
+				if is_valid_variable(table_var) and not lang_cfg.keywords[table_var] then
+					vars[table_var] = { type = "table", context = "table_base" }
+				end
+				if is_valid_variable(field) then
+					vars[field] = { type = "field", context = "table_field" }
+				end
+			end
+
+			-- Table bracket access
+			for table_var, key in expr_no_strings:gmatch("([%a_][%w_]*)%[([%a_][%w_]*)%]") do
+				if is_valid_variable(table_var) then
+					vars[table_var] = { type = "table", context = "indexed_table" }
+				end
+				if is_valid_variable(key) then
+					vars[key] = { type = "key", context = "table_key" }
+				end
+			end
+
+			-- Self method calls
+			for obj, method in expr_no_strings:gmatch("([%a_][%w_]*):([%a_][%w_]*)%s*%(") do
+				if is_valid_variable(obj) then
+					vars[obj] = { type = "object", context = "method_receiver" }
+				end
+			end
 		end
 
 		return vars
@@ -1197,20 +1662,74 @@ function M.analyze_suspicious_patterns(output)
 			table.insert(safety_issues, "potential_division_by_zero")
 		end
 
-		-- Check for buffer overflow patterns in dynamic allocation
-		if
-			(expr:match("malloc%s*%(") or expr:match("new%s*%[") or expr:match("make%s*%(")) and expr:match("[%+%-%*/]")
-		then
-			table.insert(safety_issues, "dynamic_allocation_with_arithmetic")
-		end
-
-		-- Check for integer overflow patterns
-		if expr:match("0x[fF]+") or expr:match("2147483647") or expr:match("4294967295") then
-			table.insert(safety_issues, "potential_integer_overflow")
+		-- Language-specific safety checks
+		if current_lang == "c" or current_lang == "cpp" then
+			-- Check for buffer overflow patterns in dynamic allocation
+			if
+				(expr:match("malloc%s*%(") or expr:match("new%s*%[") or expr:match("calloc%s*%("))
+				and expr:match("[%+%-%*/]")
+			then
+				table.insert(safety_issues, "dynamic_allocation_with_arithmetic")
+			end
+			-- Check for integer overflow patterns
+			if expr:match("0x[fF]+") or expr:match("2147483647") or expr:match("4294967295") then
+				table.insert(safety_issues, "potential_integer_overflow")
+			end
+		elseif current_lang == "rust" then
+			if expr:match("unwrap%s*%(") or expr:match("expect%s*%(") then
+				table.insert(safety_issues, "potential_panic")
+			end
+			-- Check for integer overflow in release mode
+			if expr:match("as%s+[iu]%d+") and expr:match("[%+%-%*/]") then
+				table.insert(safety_issues, "potential_integer_overflow")
+			end
+		elseif current_lang == "go" then
+			if expr:match("%*[%a_][%w_]*") and not expr:match("nil") then
+				table.insert(safety_issues, "potential_nil_dereference")
+			end
+			-- Check for slice bounds
+			if expr:match("%[[%d%w_]*:[%d%w_]*%]") then
+				table.insert(safety_issues, "potential_slice_bounds_error")
+			end
+		elseif current_lang == "python" then
+			-- Check for common Python runtime errors
+			if expr:match("%[[%d%w_%-]*%]") then
+				table.insert(safety_issues, "potential_index_error")
+			end
+			if expr:match("%.%w+%(%.*%)") and not expr:match("len%(") then
+				table.insert(safety_issues, "potential_attribute_error")
+			end
+			-- Division by zero is runtime error in Python
+			if expr:match("/%s*0") then
+				table.insert(safety_issues, "potential_zero_division_error")
+			end
+		elseif current_lang == "javascript" then
+			-- Check for potential undefined property access
+			if expr:match("%.%w+") and not expr:match("typeof") then
+				table.insert(safety_issues, "potential_undefined_property")
+			end
+			-- Check for potential null/undefined operations
+			if expr:match("[%+%-%*/]") and not expr:match("typeof") then
+				table.insert(safety_issues, "potential_nan_result")
+			end
+		elseif current_lang == "lua" then
+			-- Check for potential nil operations
+			if expr:match("%.%w+") then
+				table.insert(safety_issues, "potential_nil_index")
+			end
+			-- Check for string/number coercion issues
+			if expr:match("[%+%-%*/]") and expr:match('["\'"]') then
+				table.insert(safety_issues, "potential_type_coercion")
+			end
 		end
 
 		-- Only check for uninitialized variables in actual expressions, not strings
-		for var in expr:gmatch("[%a_][%w_]*") do
+		local var_pattern = "[%a_][%w_]*"
+		if current_lang == "javascript" then
+			var_pattern = "[%a_$][%w_$]*"
+		end
+
+		for var in expr:gmatch(var_pattern) do
 			-- Skip if this is part of a string literal
 			local before_var = expr:match("(.-)" .. var)
 			if before_var and (before_var:find('"[^"]*$') or before_var:find("'[^']*$")) then
@@ -1228,26 +1747,54 @@ function M.analyze_suspicious_patterns(output)
 			::continue::
 		end
 
-		-- Language-specific checks
-		if current_lang == "rust" then
-			if expr:match("unwrap%s*%(") or expr:match("expect%s*%(") then
-				table.insert(safety_issues, "potential_panic")
-			end
-		elseif current_lang == "go" then
-			if expr:match("%*[%a_][%w_]*") and not expr:match("nil") then
-				table.insert(safety_issues, "potential_nil_dereference")
-			end
-		end
-
 		return safety_issues
 	end
 
 	local function is_string_or_import_line(line)
 		local trimmed = line:gsub("^%s+", ""):gsub("%s+$", "")
 
+		-- Language-specific import patterns
+		local import_patterns = {}
+
+		if current_lang == "python" then
+			import_patterns = {
+				"^import%s+",
+				"^from%s+.*import",
+			}
+		elseif current_lang == "javascript" then
+			import_patterns = {
+				"^import%s+",
+				"^import%s*{",
+				"^import%s*%*",
+				"^const%s+.*require%s*%(",
+				"^let%s+.*require%s*%(",
+				"^var%s+.*require%s*%(",
+			}
+		elseif current_lang == "rust" then
+			import_patterns = {
+				"^use%s+",
+			}
+		elseif current_lang == "go" then
+			import_patterns = {
+				"^import%s+",
+			}
+		elseif current_lang == "lua" then
+			import_patterns = {
+				"^require%s*%(",
+				"^local%s+.*require%s*%(",
+			}
+		elseif current_lang == "c" or current_lang == "cpp" then
+			import_patterns = {
+				"^#include%s+",
+				"^#import%s+",
+			}
+		end
+
 		-- Check for import statements
-		if trimmed:match("^import%s+") or trimmed:match("^from%s+.*import") or trimmed:match("^use%s+") then
-			return true
+		for _, pattern in ipairs(import_patterns) do
+			if trimmed:match(pattern) then
+				return true
+			end
 		end
 
 		-- Check for string assignments
@@ -1258,6 +1805,24 @@ function M.analyze_suspicious_patterns(output)
 		-- Check for module paths
 		if trimmed:match('"[%w_/.%-]+/[%w_/.%-]+"') then
 			return true
+		end
+
+		-- Language-specific string patterns
+		if current_lang == "python" then
+			-- Python triple quotes, raw strings, f-strings
+			if
+				trimmed:match('=%s*""".*"""')
+				or trimmed:match("=%s*'''.*'''")
+				or trimmed:match('=%s*r"[^"]*"')
+				or trimmed:match("=%s*f'[^']*'")
+			then
+				return true
+			end
+		elseif current_lang == "javascript" then
+			-- JavaScript template literals
+			if trimmed:match("=%s*`[^`]*`") then
+				return true
+			end
 		end
 
 		return false
@@ -1285,6 +1850,21 @@ function M.analyze_suspicious_patterns(output)
 		elseif lang == "go" then
 			-- Go declarations: var x int; var y []string;
 			if trimmed:match("^var%s+[%a_][%w_]*%s+[%w_%[%]%*]+%s*$") then
+				return true
+			end
+		elseif lang == "python" then
+			-- Python type hints without assignment: x: int
+			if trimmed:match("^[%a_][%w_]*%s*:%s*[%w_%[%]%.]+%s*$") then
+				return true
+			end
+		elseif lang == "javascript" then
+			-- JavaScript variable declarations without assignment
+			if trimmed:match("^var%s+[%a_$][%w_$]*%s*;%s*$") or trimmed:match("^let%s+[%a_$][%w_$]*%s*;%s*$") then
+				return true
+			end
+		elseif lang == "lua" then
+			-- Lua local declarations without assignment
+			if trimmed:match("^local%s+[%a_][%w_]*%s*$") then
 				return true
 			end
 		end
@@ -1330,12 +1910,64 @@ function M.analyze_suspicious_patterns(output)
 					goto continue
 				end
 
+				-- Language-specific string patterns to skip
+				if current_lang == "python" and (val:match('""".*"""') or val:match("'''.*'''")) then
+					goto continue
+				elseif current_lang == "javascript" and val:match("`[^`]*`") then
+					goto continue
+				end
+
 				-- Handle language-specific variable name extraction
 				local clean_var = var
 				if current_lang == "rust" then
 					clean_var = var:match("([%a_][%w_]*)$") or var
 				elseif current_lang == "go" then
 					-- Handle multiple assignments: var1, var2 := func()
+					if var:find(",") then
+						for single_var in var:gmatch("([%a_][%w_]*)") do
+							if is_valid_variable(single_var) then
+								variable_tracker.assignments[single_var] = {
+									value = val,
+									line = line_num,
+									raw_line = cleaned_line,
+								}
+							end
+						end
+						goto continue
+					end
+					clean_var = var:match("([%a_][%w_]*)") or var
+				elseif current_lang == "python" then
+					-- Handle tuple unpacking: a, b = func()
+					if var:find(",") then
+						for single_var in var:gmatch("([%a_][%w_]*)") do
+							if is_valid_variable(single_var) then
+								variable_tracker.assignments[single_var] = {
+									value = val,
+									line = line_num,
+									raw_line = cleaned_line,
+								}
+							end
+						end
+						goto continue
+					end
+					clean_var = var:match("([%a_][%w_]*)") or var
+				elseif current_lang == "javascript" then
+					-- Handle destructuring: {a, b} = obj or [a, b] = arr
+					if var:match("{.*}") or var:match("%[.*%]") then
+						for single_var in var:gmatch("([%a_$][%w_$]*)") do
+							if is_valid_variable(single_var) then
+								variable_tracker.assignments[single_var] = {
+									value = val,
+									line = line_num,
+									raw_line = cleaned_line,
+								}
+							end
+						end
+						goto continue
+					end
+					clean_var = var:match("([%a_$][%w_$]*)") or var
+				elseif current_lang == "lua" then
+					-- Handle multiple assignments: a, b = func()
 					if var:find(",") then
 						for single_var in var:gmatch("([%a_][%w_]*)") do
 							if is_valid_variable(single_var) then
@@ -1387,10 +2019,16 @@ function M.analyze_suspicious_patterns(output)
 				end
 
 				-- Track function calls
-				if
-					val:match("[%a_][%w_]*%s*%([^)]*%)")
-					or (current_lang == "rust" and val:match("[%a_][%w_]*!%s*%([^)]*%)"))
-				then
+				local is_function_call = false
+				if current_lang == "rust" then
+					is_function_call = val:match("[%a_][%w_]*%s*%([^)]*%)") or val:match("[%a_][%w_]*!%s*%([^)]*%)")
+				elseif current_lang == "python" or current_lang == "javascript" or current_lang == "lua" then
+					is_function_call = val:match("[%a_][%w_]*%s*%([^)]*%)")
+				else
+					is_function_call = val:match("[%a_][%w_]*%s*%([^)]*%)")
+				end
+
+				if is_function_call then
 					variable_tracker.function_calls[clean_var] = {
 						call = val,
 						line = line_num,
