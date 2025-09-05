@@ -4,10 +4,12 @@ local finders = require("telescope.finders")
 local conf = require("telescope.config").values
 local actions = require("telescope.actions")
 local action_state = require("telescope.actions.state")
-local parse_debug_output = require("od.output_parser").parse_debug_output
+local parse_debug_output = require("od.parsers.output_parser").parse_debug_output
+local analyze_suspicious_patterns = require("od.parsers.variable_analyzer").analyze_suspicious_patterns
 
 M.last_errors = {}
 M.last_warnings = {}
+M.suspicious_variables = {}
 M.last_output = ""
 M.breakpoints = {}
 M.sign_id_counter = 1
@@ -79,6 +81,24 @@ M.config = {
 		rust = { "Cargo.toml", "src/main.rs", "src/lib.rs" },
 	},
 }
+
+local function place_suspicious_signs(suspicious_items)
+	-- Clear previous suspicious signs
+	vim.fn.sign_unplace("od_suspicious")
+
+	for _, item in ipairs(suspicious_items) do
+		if item.filename and item.lnum and tonumber(item.lnum) then
+			local bufnr = vim.fn.bufnr(item.filename)
+			if bufnr ~= -1 and vim.api.nvim_buf_is_loaded(bufnr) then
+				local sign_name = "ODSuspiciousValue"
+				vim.fn.sign_place(0, "od_suspicious", sign_name, item.filename, {
+					lnum = tonumber(item.lnum),
+					priority = 15,
+				})
+			end
+		end
+	end
+end
 
 function M.add_custom_debugger(lang, config)
 	M.config.debuggers[lang] = config
@@ -299,6 +319,8 @@ local function run_debugger(source_files, filetype, callback)
 	local debugger_config = M.config.debuggers[filetype]
 	local output = ""
 	local stderr = ""
+	local start_time
+
 	if not debugger_config then
 		vim.notify("No debugger configured for " .. filetype, vim.log.levels.ERROR)
 		return
@@ -359,6 +381,10 @@ local function run_debugger(source_files, filetype, callback)
 			end
 		end
 		vim.notify("Running: " .. cmd .. " " .. table.concat(args, " "))
+
+		-- Capture start time before building
+		start_time = vim.fn.reltime()
+
 		vim.fn.jobstart(vim.list_extend({ cmd }, args), {
 			stdout_buffered = true,
 			stderr_buffered = true,
@@ -373,13 +399,37 @@ local function run_debugger(source_files, filetype, callback)
 				end
 			end,
 			on_exit = function(_, code)
+				local elapsed_time = vim.fn.reltimefloat(vim.fn.reltime(start_time))
 				local full_output = output .. "\n" .. stderr
+
+				-- Check build time threshold for Rust
+				if filetype == "rust" then
+					local threshold = vim.g.rust_build_time_threshold or 60.0 -- Default 60 seconds
+					if elapsed_time > threshold then
+						vim.notify(
+							string.format(
+								"Rust build took %.2f seconds (exceeded threshold of %.2fs)",
+								elapsed_time,
+								threshold
+							),
+							vim.log.levels.WARN
+						)
+					end
+				end
 
 				if (filetype == "c" or filetype == "cpp") and code ~= 0 then
 					-- Compilation failed, parse and show errors immediately
 					local errors, warnings = parse_debug_output(full_output, filetype)
 					M.last_errors = errors
 					M.last_warnings = warnings
+					M.suspicious_variables = analyze_suspicious_patterns(output)
+					place_suspicious_signs(M.suspicious_variables)
+					if #M.suspicious_variables > 0 then
+						vim.notify(
+							string.format("Found %d suspicious patterns", #M.suspicious_variables),
+							vim.log.levels.WARN
+						)
+					end
 					M.last_output = full_output
 					vim.notify(
 						string.format(
@@ -404,7 +454,6 @@ local function run_debugger(source_files, filetype, callback)
 					end
 					return
 				end
-
 				-- Handle successful C/C++ compilation with runtime execution
 				if (filetype == "c" or filetype == "cpp") and code == 0 then
 					-- Check if we have run_args configured for runtime execution
@@ -434,6 +483,14 @@ local function run_debugger(source_files, filetype, callback)
 								local errors, warnings = parse_debug_output(runtime_full_output, filetype)
 								M.last_errors = errors
 								M.last_warnings = warnings
+								M.suspicious_variables = analyze_suspicious_patterns(output)
+								place_suspicious_signs(M.suspicious_variables)
+								if #M.suspicious_variables > 0 then
+									vim.notify(
+										string.format("Found %d suspicious patterns", #M.suspicious_variables),
+										vim.log.levels.WARN
+									)
+								end
 								vim.notify(
 									string.format(
 										"Runtime execution done. Errors: %d, Warnings: %d, Exit Code: %d",
@@ -454,7 +511,6 @@ local function run_debugger(source_files, filetype, callback)
 						return
 					end
 				end
-
 				-- Handle Rust build/check completion
 				if filetype == "rust" then
 					-- Check if this was a build/check command and we have run_args for execution
@@ -484,6 +540,14 @@ local function run_debugger(source_files, filetype, callback)
 								local errors, warnings = parse_debug_output(runtime_full_output, "rust")
 								M.last_errors = errors
 								M.last_warnings = warnings
+								M.suspicious_variables = analyze_suspicious_patterns(output)
+								place_suspicious_signs(M.suspicious_variables)
+								if #M.suspicious_variables > 0 then
+									vim.notify(
+										string.format("Found %d suspicious patterns", #M.suspicious_variables),
+										vim.log.levels.WARN
+									)
+								end
 								vim.notify(
 									string.format(
 										"Rust run done. Errors: %d, Warnings: %d, Exit Code: %d",
@@ -507,6 +571,14 @@ local function run_debugger(source_files, filetype, callback)
 						local errors, warnings = parse_debug_output(full_output, filetype)
 						M.last_errors = errors
 						M.last_warnings = warnings
+						M.suspicious_variables = analyze_suspicious_patterns(output)
+						place_suspicious_signs(M.suspicious_variables)
+						if #M.suspicious_variables > 0 then
+							vim.notify(
+								string.format("Found %d suspicious patterns", #M.suspicious_variables),
+								vim.log.levels.WARN
+							)
+						end
 						M.last_output = full_output
 						vim.notify(
 							string.format(
@@ -531,7 +603,6 @@ local function run_debugger(source_files, filetype, callback)
 						return
 					end
 				end
-
 				-- Default callback for other languages or when no runtime execution
 				callback(full_output, code)
 			end,
@@ -558,6 +629,12 @@ function M.debug()
 		local errors, warnings = parse_debug_output(output, filetype)
 		M.last_errors = errors
 		M.last_warnings = warnings
+		M.suspicious_variables = analyze_suspicious_patterns(output)
+		place_suspicious_signs(M.suspicious_variables)
+
+		if #M.suspicious_variables > 0 then
+			vim.notify(string.format("Found %d suspicious patterns", #M.suspicious_variables), vim.log.levels.WARN)
+		end
 		vim.notify(string.format("Debug done. Errors: %d, Warnings: %d", #errors, #warnings))
 		if #errors > 0 then
 			create_picker(errors, "Debug Errors")
@@ -608,6 +685,12 @@ function M.rust_clippy()
 			local errors, warnings = parse_debug_output(full_output, "rust")
 			M.last_errors = errors
 			M.last_warnings = warnings
+			M.suspicious_variables = analyze_suspicious_patterns(output)
+			place_suspicious_signs(M.suspicious_variables)
+
+			if #M.suspicious_variables > 0 then
+				vim.notify(string.format("Found %d suspicious patterns", #M.suspicious_variables), vim.log.levels.WARN)
+			end
 			vim.notify(string.format("Clippy done. Errors: %d, Warnings: %d", #errors, #warnings))
 			if #warnings > 0 then
 				create_picker(warnings, "Clippy Warnings")
@@ -686,6 +769,12 @@ function M.go_build()
 			local errors, warnings = parse_debug_output(full_output, "go")
 			M.last_errors = errors
 			M.last_warnings = warnings
+			M.suspicious_variables = analyze_suspicious_patterns(output)
+			place_suspicious_signs(M.suspicious_variables)
+
+			if #M.suspicious_variables > 0 then
+				vim.notify(string.format("Found %d suspicious patterns", #M.suspicious_variables), vim.log.levels.WARN)
+			end
 			vim.notify(
 				string.format("Go build done. Errors: %d, Warnings: %d, Exit Code: %d", #errors, #warnings, code)
 			)
@@ -883,6 +972,12 @@ function M.go_test()
 
 			M.last_errors = errors
 			M.last_warnings = warnings
+			M.suspicious_variables = analyze_suspicious_patterns(output)
+			place_suspicious_signs(M.suspicious_variables)
+
+			if #M.suspicious_variables > 0 then
+				vim.notify(string.format("Found %d suspicious patterns", #M.suspicious_variables), vim.log.levels.WARN)
+			end
 			vim.notify(string.format("Go tests done. Errors: %d, Warnings: %d", #errors, #warnings))
 			if #errors > 0 then
 				create_picker(errors, "Test Errors")
@@ -1041,6 +1136,12 @@ function M.python_test()
 
 			M.last_errors = errors
 			M.last_warnings = warnings
+			M.suspicious_variables = analyze_suspicious_patterns(output)
+			place_suspicious_signs(M.suspicious_variables)
+
+			if #M.suspicious_variables > 0 then
+				vim.notify(string.format("Found %d suspicious patterns", #M.suspicious_variables), vim.log.levels.WARN)
+			end
 			vim.notify(string.format("Python tests done. Errors: %d, Warnings: %d", #errors, #warnings))
 			if #errors > 0 then
 				create_picker(errors, "Test Errors")
@@ -1223,6 +1324,12 @@ function M.js_test()
 
 			M.last_errors = errors
 			M.last_warnings = warnings
+			M.suspicious_variables = analyze_suspicious_patterns(output)
+			place_suspicious_signs(M.suspicious_variables)
+
+			if #M.suspicious_variables > 0 then
+				vim.notify(string.format("Found %d suspicious patterns", #M.suspicious_variables), vim.log.levels.WARN)
+			end
 			vim.notify(string.format("JS/TS tests done. Errors: %d, Warnings: %d", #errors, #warnings))
 			if #errors > 0 then
 				create_picker(errors, "Test Errors")
@@ -1366,6 +1473,12 @@ function M.busted_test()
 
 			M.last_errors = errors
 			M.last_warnings = warnings
+			M.suspicious_variables = analyze_suspicious_patterns(output)
+			place_suspicious_signs(M.suspicious_variables)
+
+			if #M.suspicious_variables > 0 then
+				vim.notify(string.format("Found %d suspicious patterns", #M.suspicious_variables), vim.log.levels.WARN)
+			end
 			vim.notify(string.format("Busted tests completed. Errors: %d, Warnings: %d", #errors, #warnings))
 			if #errors > 0 then
 				create_picker(errors, "Busted Test Errors")
@@ -1516,6 +1629,12 @@ function M.rust_test()
 
 			M.last_errors = errors
 			M.last_warnings = warnings
+			M.suspicious_variables = analyze_suspicious_patterns(output)
+			place_suspicious_signs(M.suspicious_variables)
+
+			if #M.suspicious_variables > 0 then
+				vim.notify(string.format("Found %d suspicious patterns", #M.suspicious_variables), vim.log.levels.WARN)
+			end
 			vim.notify(string.format("Rust tests done. Errors: %d, Warnings: %d", #errors, #warnings))
 			if #errors > 0 then
 				create_picker(errors, "Test Errors")
@@ -1647,7 +1766,12 @@ function M.ctest()
 
 			M.last_errors = errors
 			M.last_warnings = warnings
+			M.suspicious_variables = analyze_suspicious_patterns(output)
+			place_suspicious_signs(M.suspicious_variables)
 
+			if #M.suspicious_variables > 0 then
+				vim.notify(string.format("Found %d suspicious patterns", #M.suspicious_variables), vim.log.levels.WARN)
+			end
 			vim.notify(string.format("CTest done. Errors: %d, Warnings: %d", #errors, #warnings))
 
 			if #errors > 0 then
@@ -1755,6 +1879,12 @@ function M.cmake_configure()
 			local errors, warnings = parse_debug_output(full_output, filetype)
 			M.last_errors = errors
 			M.last_warnings = warnings
+			M.suspicious_variables = analyze_suspicious_patterns(output)
+			place_suspicious_signs(M.suspicious_variables)
+
+			if #M.suspicious_variables > 0 then
+				vim.notify(string.format("Found %d suspicious patterns", #M.suspicious_variables), vim.log.levels.WARN)
+			end
 			vim.notify(
 				string.format("CMake configure done. Errors: %d, Warnings: %d, Exit Code: %d", #errors, #warnings, code)
 			)
@@ -1821,6 +1951,12 @@ function M.cmake_build()
 			local errors, warnings = parse_debug_output(full_output, filetype)
 			M.last_errors = errors
 			M.last_warnings = warnings
+			M.suspicious_variables = analyze_suspicious_patterns(output)
+			place_suspicious_signs(M.suspicious_variables)
+
+			if #M.suspicious_variables > 0 then
+				vim.notify(string.format("Found %d suspicious patterns", #M.suspicious_variables), vim.log.levels.WARN)
+			end
 			vim.notify(
 				string.format("CMake build done. Errors: %d, Warnings: %d, Exit Code: %d", #errors, #warnings, code)
 			)
@@ -1913,6 +2049,12 @@ function M.gdb_debug_executable(executable)
 			local errors, warnings = parse_debug_output(full_output, filetype)
 			M.last_errors = errors
 			M.last_warnings = warnings
+			M.suspicious_variables = analyze_suspicious_patterns(output)
+			place_suspicious_signs(M.suspicious_variables)
+
+			if #M.suspicious_variables > 0 then
+				vim.notify(string.format("Found %d suspicious patterns", #M.suspicious_variables), vim.log.levels.WARN)
+			end
 			vim.notify(string.format("GDB session ended. Errors: %d, Warnings: %d", #errors, #warnings))
 			if #errors > 0 then
 				create_picker(errors, "GDB Debug Errors")
@@ -2010,6 +2152,12 @@ function M.gdb_remote_executable(executable, target)
 			local errors, warnings = parse_debug_output(full_output, filetype)
 			M.last_errors = errors
 			M.last_warnings = warnings
+			M.suspicious_variables = analyze_suspicious_patterns(output)
+			place_suspicious_signs(M.suspicious_variables)
+
+			if #M.suspicious_variables > 0 then
+				vim.notify(string.format("Found %d suspicious patterns", #M.suspicious_variables), vim.log.levels.WARN)
+			end
 			vim.notify(string.format("GDB remote session ended. Errors: %d, Warnings: %d", #errors, #warnings))
 			if #errors > 0 then
 				create_picker(errors, "GDB Remote Debug Errors")
@@ -2461,6 +2609,195 @@ function M.clear_telescope_items()
 	-- Clear previous telescope signs
 	local sign_group = "od_telescope_items"
 	vim.fn.sign_unplace(sign_group)
+	local sign_group2 = "od_suspicious"
+	vim.fn.sign_unplace(sign_group2)
+end
+
+function M.show_suspicious_variables()
+	if #M.suspicious_variables == 0 then
+		vim.notify("No suspicious variables detected", vim.log.levels.INFO)
+		return
+	end
+
+	pickers
+		.new({}, {
+			prompt_title = "Suspicious Variables & Values",
+			finder = finders.new_table({
+				results = M.suspicious_variables,
+				entry_maker = function(entry)
+					return {
+						value = entry,
+						display = entry.display,
+						ordinal = entry.display,
+						filename = entry.filename,
+						lnum = entry.lnum,
+						col = entry.col or 1,
+					}
+				end,
+			}),
+			sorter = conf.generic_sorter({}),
+			attach_mappings = function(prompt_bufnr)
+				actions.select_default:replace(function()
+					actions.close(prompt_bufnr)
+					local selection = action_state.get_selected_entry()
+					if selection then
+						-- Check if file exists and get the correct buffer
+						local bufnr = vim.fn.bufnr(selection.filename)
+						if bufnr == -1 then
+							-- Try to find the buffer by basename if full path didn't work
+							local basename = vim.fn.fnamemodify(selection.filename, ":t")
+							for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+								local buf_name = vim.api.nvim_buf_get_name(buf)
+								if vim.fn.fnamemodify(buf_name, ":t") == basename then
+									bufnr = buf
+									break
+								end
+							end
+						end
+
+						if bufnr ~= -1 then
+							-- Switch to existing buffer
+							vim.api.nvim_set_current_buf(bufnr)
+						else
+							-- Only create new buffer if file doesn't exist in any loaded buffer
+							vim.cmd("edit " .. vim.fn.fnameescape(selection.filename))
+						end
+
+						-- Validate line number before setting cursor
+						local line_count = vim.api.nvim_buf_line_count(0)
+						local target_line = math.min(selection.lnum, line_count)
+						vim.api.nvim_win_set_cursor(0, { target_line, selection.col or 0 })
+						vim.cmd("normal! zz")
+
+						vim.notify(
+							"Jumped to suspicious pattern: " .. (selection.value.text or ""),
+							vim.log.levels.INFO
+						)
+					end
+				end)
+				return true
+			end,
+		})
+		:find()
+end
+
+function M.save_breakpoints()
+	if #M.breakpoints == 0 then
+		vim.notify("No breakpoints to save", vim.log.levels.WARN)
+		return
+	end
+
+	-- Ask for save location
+	local save_path = vim.fn.input("Save breakpoints to: ", vim.fn.getcwd() .. "/breakpoints.json")
+	if save_path == "" then
+		vim.notify("Save cancelled", vim.log.levels.INFO)
+		return
+	end
+
+	-- Prepare data for saving
+	local save_data = {
+		version = "1.0",
+		timestamp = os.date("%Y-%m-%d %H:%M:%S"),
+		breakpoints = {},
+	}
+
+	for _, bp in ipairs(M.breakpoints) do
+		table.insert(save_data.breakpoints, {
+			cmd = bp.cmd,
+			file = bp.file,
+			line = bp.line,
+			ctx = bp.ctx,
+		})
+	end
+
+	-- Convert to JSON string
+	local json_str = vim.fn.json_encode(save_data)
+
+	-- Write to file
+	local file = io.open(save_path, "w")
+	if not file then
+		vim.notify("Failed to create save file: " .. save_path, vim.log.levels.ERROR)
+		return
+	end
+
+	file:write(json_str)
+	file:close()
+
+	vim.notify(string.format("Saved %d breakpoints to %s", #M.breakpoints, save_path), vim.log.levels.INFO)
+end
+
+function M.load_breakpoints()
+	-- Ask for load location
+	local load_path = vim.fn.input("Load breakpoints from: ", vim.fn.getcwd() .. "/breakpoints.json")
+	if load_path == "" then
+		vim.notify("Load cancelled", vim.log.levels.INFO)
+		return
+	end
+
+	-- Check if file exists
+	local file = io.open(load_path, "r")
+	if not file then
+		vim.notify("File not found: " .. load_path, vim.log.levels.ERROR)
+		return
+	end
+
+	-- Read file content
+	local content = file:read("*all")
+	file:close()
+
+	-- Parse JSON
+	local ok, data = pcall(vim.fn.json_decode, content)
+	if not ok or not data or not data.breakpoints then
+		vim.notify("Invalid breakpoint file format", vim.log.levels.ERROR)
+		return
+	end
+
+	-- Clear existing breakpoints first
+	M.clear_breakpoints()
+
+	local loaded_count = 0
+	local failed_count = 0
+
+	-- Load each breakpoint
+	for _, bp_data in ipairs(data.breakpoints) do
+		-- Check if file exists
+		if vim.fn.filereadable(bp_data.file) == 1 then
+			-- Add sign to the buffer
+			local sign_id = M.sign_id_counter
+			vim.fn.sign_place(sign_id, "breakpoint_group", "ODBreakpointSign", bp_data.file, { lnum = bp_data.line })
+			M.sign_id_counter = M.sign_id_counter + 1
+
+			-- Store in breakpoints list
+			table.insert(M.breakpoints, {
+				cmd = bp_data.cmd,
+				file = bp_data.file,
+				line = bp_data.line,
+				ctx = bp_data.ctx,
+				sign_id = sign_id,
+			})
+
+			vim.fn.setreg("+", bp_data.cmd)
+
+			-- Small delay to allow clipboard operations
+			vim.cmd("sleep 50m")
+
+			loaded_count = loaded_count + 1
+		else
+			vim.notify(string.format("File not found, skipping: %s", bp_data.file), vim.log.levels.WARN)
+			failed_count = failed_count + 1
+		end
+	end
+
+	local message = string.format("Loaded %d breakpoints", loaded_count)
+	if failed_count > 0 then
+		message = message .. string.format(" (%d failed)", failed_count)
+	end
+
+	vim.notify(message, vim.log.levels.INFO)
+
+	if loaded_count > 0 then
+		vim.notify("Last breakpoint command copied to clipboard", vim.log.levels.INFO)
+	end
 end
 
 function M.setup(opts)
@@ -2477,7 +2814,8 @@ function M.setup(opts)
 	vim.api.nvim_create_user_command("ODErrors", M.show_errors, {})
 	vim.api.nvim_create_user_command("ODWarnings", M.show_warnings, {})
 	vim.api.nvim_create_user_command("ODOutput", M.show_output, {})
-	vim.api.nvim_create_user_command("ODClearTelescopeItems", M.clear_telescope_items, {})
+	vim.api.nvim_create_user_command("ODClearItems", M.clear_telescope_items, {})
+	vim.api.nvim_create_user_command("ODSuspicious", M.show_suspicious_variables, {})
 
 	-- Rust-specific commands
 	vim.api.nvim_create_user_command("ODRustClippy", M.rust_clippy, {})
@@ -2505,6 +2843,8 @@ function M.setup(opts)
 	vim.api.nvim_create_user_command("ODAddTracepoint", M.copy_tracepoint, {})
 	vim.api.nvim_create_user_command("ODRemoveTracepoint", M.copy_clear_tracepoint, {})
 	vim.api.nvim_create_user_command("ODClearPoints", M.clear_breakpoints, {})
+	vim.api.nvim_create_user_command("ODSavePoints", M.save_breakpoints, {})
+	vim.api.nvim_create_user_command("ODLoadPoints", M.load_breakpoints, {})
 
 	-- Test integration for python, javascript/typepescrit, lua
 	vim.api.nvim_create_user_command("ODPythonTest", M.python_test, {})
