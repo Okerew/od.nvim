@@ -6,7 +6,7 @@ function M.parse_debug_output(output, filetype)
 
 	for line in output:gmatch("[^\n]+") do
 		if line ~= nil then
-			local file, line_num, msg, severity
+			local file, line_num, msg
 
 			if filetype == "c" or filetype == "cpp" then
 				file, line_num, msg = line:match("([^:]+%.[ch]p*p*):(%d+):%d*:?%s*(.+)")
