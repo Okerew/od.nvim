@@ -7,6 +7,8 @@ local action_state = require("telescope.actions.state")
 local parse_debug_output = require("od.parsers.output_parser").parse_debug_output
 local analyze_suspicious_patterns = require("od.parsers.variable_analyzer").analyze_suspicious_patterns
 
+local ts = vim.treesitter
+
 M.last_errors = {}
 M.last_warnings = {}
 M.suspicious_variables = {}
@@ -317,73 +319,55 @@ end
 
 local function run_debugger(source_files, filetype, callback)
 	local debugger_config = M.config.debuggers[filetype]
-	local output = ""
-	local stderr = ""
-	local start_time
-
 	if not debugger_config then
-		vim.notify("No debugger configured for " .. filetype, vim.log.levels.ERROR)
 		return
 	end
 
 	-- Check for CMake project for C/C++ files
 	if filetype == "c" or filetype == "cpp" then
 		local project_root = find_cmake_project_root()
-		if project_root then
-			vim.notify("CMake project detected, skipping compilation and running executable directly...")
-			-- Skip compilation entirely and go straight to runtime execution
-			if debugger_config.run_args then
-				local run_cmd = debugger_config.run_args[1]
-				local run_args = vim.list_slice(debugger_config.run_args, 2)
-				local runtime_output = ""
-				local runtime_stderr = ""
-				vim.fn.jobstart(vim.list_extend({ run_cmd }, run_args), {
-					stdout_buffered = true,
-					stderr_buffered = true,
-					on_stdout = function(_, data)
-						if data then
-							runtime_output = runtime_output .. table.concat(data, "\n")
-						end
-					end,
-					on_stderr = function(_, data)
-						if data then
-							runtime_stderr = runtime_stderr .. table.concat(data, "\n")
-						end
-					end,
-					on_exit = function(_, runtime_code)
-						local runtime_full_output = runtime_output .. "\n" .. runtime_stderr
-						callback(runtime_full_output, runtime_code)
-					end,
-				})
-				return
-			else
-				vim.notify(
-					"CMake project detected but no run_args configured for runtime execution",
-					vim.log.levels.WARN
-				)
-				return
-			end
+		if project_root and debugger_config.run_args then
+			local run_cmd = debugger_config.run_args[1]
+			local run_args = vim.list_slice(debugger_config.run_args, 2)
+			local runtime_output = ""
+			local runtime_stderr = ""
+			vim.fn.jobstart(vim.list_extend({ run_cmd }, run_args), {
+				stdout_buffered = true,
+				stderr_buffered = true,
+				on_stdout = function(_, data)
+					if data then
+						runtime_output = runtime_output .. table.concat(data, "\n")
+					end
+				end,
+				on_stderr = function(_, data)
+					if data then
+						runtime_stderr = runtime_stderr .. table.concat(data, "\n")
+					end
+				end,
+				on_exit = function(_, runtime_code)
+					local runtime_full_output = runtime_output .. "\n" .. runtime_stderr
+					callback(runtime_full_output, runtime_code)
+				end,
+			})
+			return
 		end
 	end
 
 	if debugger_config.cmd and debugger_config.args then
 		local cmd = debugger_config.cmd
 		local args = vim.deepcopy(debugger_config.args)
+
 		if filetype == "go" then
 			table.insert(args, source_files[1])
-		elseif filetype == "rust" then
-			-- For Rust, cargo commands don't need additional file arguments
-			-- The args are already complete (e.g., ["check", "--color=never"])
-		else
-			-- For other languages, append source files at the end
+		elseif filetype ~= "rust" then
 			for _, src_file in ipairs(source_files) do
 				table.insert(args, src_file)
 			end
 		end
-		vim.notify("Running: " .. cmd .. " " .. table.concat(args, " "))
 
-		-- Capture start time before building
-		start_time = vim.fn.reltime()
+		local output = ""
+		local stderr = ""
+		local start_time = vim.fn.reltime()
 
 		vim.fn.jobstart(vim.list_extend({ cmd }, args), {
 			stdout_buffered = true,
@@ -402,9 +386,9 @@ local function run_debugger(source_files, filetype, callback)
 				local elapsed_time = vim.fn.reltimefloat(vim.fn.reltime(start_time))
 				local full_output = output .. "\n" .. stderr
 
-				-- Check build time threshold for Rust
+				-- Rust build time notification
 				if filetype == "rust" then
-					local threshold = vim.g.rust_build_time_threshold or 60.0 -- Default 60 seconds
+					local threshold = vim.g.rust_build_time_threshold or 60.0
 					if elapsed_time > threshold then
 						vim.notify(
 							string.format(
@@ -417,198 +401,64 @@ local function run_debugger(source_files, filetype, callback)
 					end
 				end
 
-				if (filetype == "c" or filetype == "cpp") and code ~= 0 then
-					-- Compilation failed, parse and show errors immediately
-					local errors, warnings = parse_debug_output(full_output, filetype)
-					M.last_errors = errors
-					M.last_warnings = warnings
-					M.suspicious_variables = analyze_suspicious_patterns(output)
-					place_suspicious_signs(M.suspicious_variables)
-					if #M.suspicious_variables > 0 then
-						vim.notify(
-							string.format("Found %d suspicious patterns", #M.suspicious_variables),
-							vim.log.levels.WARN
-						)
-					end
-					M.last_output = full_output
-					vim.notify(
-						string.format(
-							"Compilation failed (exit code: %d). Errors: %d, Warnings: %d",
-							code,
-							#errors,
-							#warnings
-						),
-						vim.log.levels.ERROR
-					)
-					if #errors > 0 then
-						create_picker(errors, "Compilation Errors")
-					elseif #warnings > 0 then
-						create_picker(warnings, "Compilation Warnings")
-					else
-						-- No structured errors found, show raw output
-						vim.notify(
-							"Compilation failed but no structured errors detected. Check output.",
-							vim.log.levels.WARN
-						)
-						M.show_output()
-					end
+				-- Handle C/C++ runtime execution
+				if (filetype == "c" or filetype == "cpp") and code == 0 and debugger_config.run_args then
+					local run_cmd = debugger_config.run_args[1]
+					local run_args = vim.list_slice(debugger_config.run_args, 2)
+					local runtime_output = ""
+					local runtime_stderr = ""
+					vim.fn.jobstart(vim.list_extend({ run_cmd }, run_args), {
+						stdout_buffered = true,
+						stderr_buffered = true,
+						on_stdout = function(_, data)
+							if data then
+								runtime_output = runtime_output .. table.concat(data, "\n")
+							end
+						end,
+						on_stderr = function(_, data)
+							if data then
+								runtime_stderr = runtime_stderr .. table.concat(data, "\n")
+							end
+						end,
+						on_exit = function(_, runtime_code)
+							local runtime_full_output = runtime_output .. "\n" .. runtime_stderr
+							callback(runtime_full_output, runtime_code)
+						end,
+					})
 					return
 				end
-				-- Handle successful C/C++ compilation with runtime execution
-				if (filetype == "c" or filetype == "cpp") and code == 0 then
-					-- Check if we have run_args configured for runtime execution
-					if debugger_config.run_args then
-						vim.notify("Compilation successful, running with debugger tools...")
-						-- Run the compiled program with valgrind or other runtime tools
-						local run_cmd = debugger_config.run_args[1]
-						local run_args = vim.list_slice(debugger_config.run_args, 2)
-						local runtime_output = ""
-						local runtime_stderr = ""
-						vim.fn.jobstart(vim.list_extend({ run_cmd }, run_args), {
-							stdout_buffered = true,
-							stderr_buffered = true,
-							on_stdout = function(_, data)
-								if data then
-									runtime_output = runtime_output .. table.concat(data, "\n")
-								end
-							end,
-							on_stderr = function(_, data)
-								if data then
-									runtime_stderr = runtime_stderr .. table.concat(data, "\n")
-								end
-							end,
-							on_exit = function(_, runtime_code)
-								local runtime_full_output = runtime_output .. "\n" .. runtime_stderr
-								M.last_output = runtime_full_output
-								local errors, warnings = parse_debug_output(runtime_full_output, filetype)
-								M.last_errors = errors
-								M.last_warnings = warnings
-								M.suspicious_variables = analyze_suspicious_patterns(output)
-								place_suspicious_signs(M.suspicious_variables)
-								if #M.suspicious_variables > 0 then
-									vim.notify(
-										string.format("Found %d suspicious patterns", #M.suspicious_variables),
-										vim.log.levels.WARN
-									)
-								end
-								vim.notify(
-									string.format(
-										"Runtime execution done. Errors: %d, Warnings: %d, Exit Code: %d",
-										#errors,
-										#warnings,
-										runtime_code
-									)
-								)
-								if #errors > 0 then
-									create_picker(errors, "Runtime Errors")
-								elseif #warnings > 0 then
-									create_picker(warnings, "Runtime Warnings")
-								else
-									vim.notify("Program executed successfully")
-								end
-							end,
-						})
-						return
-					end
+
+				-- Handle Rust runtime execution
+				if filetype == "rust" and code == 0 and debugger_config.run_args then
+					local run_cmd = debugger_config.run_args[1]
+					local run_args = vim.list_slice(debugger_config.run_args, 2)
+					local runtime_output = ""
+					local runtime_stderr = ""
+					vim.fn.jobstart(vim.list_extend({ run_cmd }, run_args), {
+						stdout_buffered = true,
+						stderr_buffered = true,
+						on_stdout = function(_, data)
+							if data then
+								runtime_output = runtime_output .. table.concat(data, "\n")
+							end
+						end,
+						on_stderr = function(_, data)
+							if data then
+								runtime_stderr = runtime_stderr .. table.concat(data, "\n")
+							end
+						end,
+						on_exit = function(_, runtime_code)
+							local runtime_full_output = runtime_output .. "\n" .. runtime_stderr
+							callback(runtime_full_output, runtime_code)
+						end,
+					})
+					return
 				end
-				-- Handle Rust build/check completion
-				if filetype == "rust" then
-					-- Check if this was a build/check command and we have run_args for execution
-					if code == 0 and debugger_config.run_args then
-						vim.notify("Rust build/check successful, running program...")
-						-- Run the Rust program
-						local run_cmd = debugger_config.run_args[1]
-						local run_args = vim.list_slice(debugger_config.run_args, 2)
-						local runtime_output = ""
-						local runtime_stderr = ""
-						vim.fn.jobstart(vim.list_extend({ run_cmd }, run_args), {
-							stdout_buffered = true,
-							stderr_buffered = true,
-							on_stdout = function(_, data)
-								if data then
-									runtime_output = runtime_output .. table.concat(data, "\n")
-								end
-							end,
-							on_stderr = function(_, data)
-								if data then
-									runtime_stderr = runtime_stderr .. table.concat(data, "\n")
-								end
-							end,
-							on_exit = function(_, runtime_code)
-								local runtime_full_output = runtime_output .. "\n" .. runtime_stderr
-								M.last_output = runtime_full_output
-								local errors, warnings = parse_debug_output(runtime_full_output, "rust")
-								M.last_errors = errors
-								M.last_warnings = warnings
-								M.suspicious_variables = analyze_suspicious_patterns(output)
-								place_suspicious_signs(M.suspicious_variables)
-								if #M.suspicious_variables > 0 then
-									vim.notify(
-										string.format("Found %d suspicious patterns", #M.suspicious_variables),
-										vim.log.levels.WARN
-									)
-								end
-								vim.notify(
-									string.format(
-										"Rust run done. Errors: %d, Warnings: %d, Exit Code: %d",
-										#errors,
-										#warnings,
-										runtime_code
-									)
-								)
-								if #errors > 0 then
-									create_picker(errors, "Runtime Errors")
-								elseif #warnings > 0 then
-									create_picker(warnings, "Runtime Warnings")
-								else
-									vim.notify("Program executed successfully")
-								end
-							end,
-						})
-						return
-					elseif code ~= 0 then
-						-- Rust build/check failed, parse and show errors
-						local errors, warnings = parse_debug_output(full_output, filetype)
-						M.last_errors = errors
-						M.last_warnings = warnings
-						M.suspicious_variables = analyze_suspicious_patterns(output)
-						place_suspicious_signs(M.suspicious_variables)
-						if #M.suspicious_variables > 0 then
-							vim.notify(
-								string.format("Found %d suspicious patterns", #M.suspicious_variables),
-								vim.log.levels.WARN
-							)
-						end
-						M.last_output = full_output
-						vim.notify(
-							string.format(
-								"Rust build/check failed (exit code: %d). Errors: %d, Warnings: %d",
-								code,
-								#errors,
-								#warnings
-							),
-							vim.log.levels.ERROR
-						)
-						if #errors > 0 then
-							create_picker(errors, "Build Errors")
-						elseif #warnings > 0 then
-							create_picker(warnings, "Build Warnings")
-						else
-							vim.notify(
-								"Build failed but no structured errors detected. Check output.",
-								vim.log.levels.WARN
-							)
-							M.show_output()
-						end
-						return
-					end
-				end
-				-- Default callback for other languages or when no runtime execution
+
+				-- Default callback
 				callback(full_output, code)
 			end,
 		})
-	else
-		vim.notify("Invalid debugger configuration for " .. filetype, vim.log.levels.ERROR)
 	end
 end
 
@@ -790,71 +640,74 @@ function M.go_build()
 end
 
 local function get_current_function()
-	local current_line = vim.fn.line(".")
-	local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
-	-- Look backwards from cursor to find function definition
-	for i = current_line, 1, -1 do
-		local line = lines[i]
-		if line then
-			-- Python function pattern
-			local py_func = line:match("^%s*def%s+([%w_]+)%s*%(")
-			if py_func then
-				return py_func
-			end
-			-- Go function pattern
-			local go_func = line:match("^%s*func%s+([%w_]+)%s*%(")
-			if go_func then
-				return go_func
-			end
-			-- Rust function pattern
-			local rust_func = line:match("^%s*fn%s+([%w_]+)%s*%(") or line:match("^%s*#%[test%]%s*fn%s+([%w_]+)%s*%(")
-			if rust_func then
-				return rust_func
-			end
-			-- JavaScript/TypeScript function patterns
-			local js_func = line:match("^%s*function%s+([%w_]+)%s*%(")
-				or line:match("^%s*([%w_]+)%s*:%s*function%s*%(")
-				or line:match("^%s*const%s+([%w_]+)%s*=%s*%(?")
-				or line:match("^%s*([%w_]+)%s*%(%s*%)%s*=>")
-			if js_func then
-				return js_func
-			end
-			-- Lua function pattern
-			local lua_func = line:match("^%s*function%s+[%w_.]*%.?([%w_]+)%s*%(")
-				or line:match("^%s*local%s+function%s+([%w_]+)%s*%(")
-			if lua_func then
-				return lua_func
-			end
-			-- C function patterns
-			local c_func = line:match("^%s*[%w_*%s]+%s+([%w_]+)%s*%(")
-				or line:match("^%s*static%s+[%w_*%s]+%s+([%w_]+)%s*%(")
-				or line:match("^%s*inline%s+[%w_*%s]+%s+([%w_]+)%s*%(")
-				or line:match("^%s*extern%s+[%w_*%s]+%s+([%w_]+)%s*%(")
-			-- Filter out common false positives for C
-			if c_func and not line:match("^%s*#") and not line:match("^%s*//") and not line:match("^%s*/%*") then
-				-- Additional validation: check if it looks like a real function
-				-- Skip if it looks like a variable declaration or macro
-				if not line:match("=%s*[^;]*$") and not line:match("^%s*typedef") then
-					return c_func
+	local bufnr = vim.api.nvim_get_current_buf()
+	local cursor = vim.api.nvim_win_get_cursor(0)
+	local row, col = cursor[1] - 1, cursor[2] -- Convert to 0-based indexing
+
+	-- Get the parser for current buffer
+	local parser = ts.get_parser(bufnr)
+	if not parser then
+		return nil
+	end
+
+	local tree = parser:parse()[1]
+	local root = tree:root()
+
+	-- Get the node at cursor position
+	local node = root:descendant_for_range(row, col, row, col)
+
+	-- Traverse up the tree to find a function node
+	while node do
+		local node_type = node:type()
+
+		-- Check for function-like nodes based on language
+		if
+			node_type:match("function")
+			or node_type:match("method")
+			or node_type == "func_declaration" -- Go
+			or node_type == "function_declaration" -- JavaScript/TypeScript
+			or node_type == "function_definition" -- Python/C/C++
+			or node_type == "function_item" -- Rust
+			or node_type == "method_definition" -- C++/Ruby
+			or node_type == "arrow_function" -- JavaScript
+			or node_type == "lambda_expression"
+		then -- Various languages
+			-- Try to extract function name
+			local name_node = nil
+
+			-- Different languages have different patterns for function names
+			for child in node:iter_children() do
+				local child_type = child:type()
+				if child_type == "identifier" or child_type == "name" or child_type == "function_name" then
+					name_node = child
+					break
 				end
 			end
-			-- C++ function patterns (includes C patterns plus C++-specific ones)
-			local cpp_func = line:match("^%s*[%w_:<>*%s]+%s+([%w_:]+)%s*%(")
-				or line:match("^%s*virtual%s+[%w_:<>*%s]+%s+([%w_:]+)%s*%(")
-				or line:match("^%s*override%s+[%w_:<>*%s]+%s+([%w_:]+)%s*%(")
-				or line:match("^%s*template%s*<[^>]*>%s*[%w_:<>*%s]+%s+([%w_:]+)%s*%(")
-				or line:match("^%s*constexpr%s+[%w_:<>*%s]+%s+([%w_:]+)%s*%(")
-				or line:match("^%s*explicit%s+([%w_:]+)%s*%(") -- constructors
-				or line:match("^%s*([%w_:]+)::[%w_:]+%s*%(") -- method definitions
-			-- Filter out common false positives for C++
-			if cpp_func and not line:match("^%s*#") and not line:match("^%s*//") and not line:match("^%s*/%*") then
-				-- Additional validation for C++
-				if not line:match("=%s*[^;]*$") and not line:match("^%s*typedef") and not line:match("^%s*using") then
-					return cpp_func
+
+			-- If we didn't find a direct identifier, look deeper
+			if not name_node then
+				for child in node:iter_children() do
+					for grandchild in child:iter_children() do
+						if grandchild:type() == "identifier" then
+							name_node = grandchild
+							break
+						end
+					end
+					if name_node then
+						break
+					end
 				end
+			end
+
+			if name_node then
+				local name = ts.get_node_text(name_node, bufnr)
+				return name
 			end
 		end
+
+		node = node:parent()
 	end
+
 	return nil
 end
 
@@ -2176,72 +2029,127 @@ local function current_file_line()
 	return file, line
 end
 
-local function get_context()
-	local line_text = vim.fn.getline(".")
-
-	-- Check if it's an if statement
-	if line_text:match("^%s*if ") then
-		return "if"
+local function extract_condition_from_node(node, bufnr)
+	-- Look for condition child node in if statements
+	for child in node:iter_children() do
+		local child_type = child:type()
+		if
+			child_type == "condition"
+			or child_type == "parenthesized_expression"
+			or child_type == "binary_expression"
+			or child_type == "comparison_operator"
+		then
+			return ts.get_node_text(child, bufnr)
+		end
 	end
+	return nil
+end
 
-	-- Function detection
-	local go_func = line_text:match("^%s*func%s+([%w_]+)")
-	local rust_func = line_text:match("^%s*fn%s+([%w_]+)")
-	local cpp_func = line_text:match("^%s*(void|int|char|float|double|bool|auto)%s+([%w_]+)%s*%(")
+local function extract_function_name(node, bufnr)
+	for child in node:iter_children() do
+		if child:type() == "identifier" or child:type() == "name" then
+			return ts.get_node_text(child, bufnr)
+		end
+	end
+	return nil
+end
 
-	if go_func then
-		return "function", go_func
-	elseif rust_func then
-		return "function", rust_func
-	elseif line_text:match("goroutine") or line_text:match("// dlv:goroutine") then
-		return "goroutine"
-	elseif cpp_func then
-		return "function", cpp_func:match("%S+$")
-	end
-
-	-- Variable detection via known declarations
-	local var_name
-	-- Go: var or := assignment
-	var_name = line_text:match("%s*var%s+([%w_]+)")
-	if not var_name then
-		var_name = line_text:match("([%w_]+)%s*:?=") -- short declaration
-	end
-	-- Rust: let declaration
-	if not var_name then
-		var_name = line_text:match("%s*let%s+([%w_]+)")
-	end
-	-- C/C++: type-based declaration
-	if not var_name then
-		local name = line_text:match("%s*(?:int|char|float|double|bool|auto)%s+([%w_]+)")
-		if name then
-			-- Only consider as variable if followed by = or ;
-			if line_text:match(name .. "%s*=") or line_text:match(name .. "%s*;") then
-				var_name = name
+local function extract_variable_name(node, bufnr)
+	-- Variable declarations can have complex structures
+	-- Look for identifier nodes that represent the variable name
+	for child in node:iter_children() do
+		local child_type = child:type()
+		if child_type == "identifier" then
+			return ts.get_node_text(child, bufnr)
+		elseif child_type == "variable_declarator" or child_type == "init_declarator" then
+			-- Nested structure, look deeper
+			for grandchild in child:iter_children() do
+				if grandchild:type() == "identifier" then
+					return ts.get_node_text(grandchild, bufnr)
+				end
 			end
 		end
 	end
+	return nil
+end
 
-	if var_name then
-		return "variable", var_name
+local function get_context()
+	local bufnr = vim.api.nvim_get_current_buf()
+	local cursor = vim.api.nvim_win_get_cursor(0)
+	local row, col = cursor[1] - 1, cursor[2]
+
+	local parser = ts.get_parser(bufnr)
+	if not parser then
+		return "line"
 	end
 
-	-- fallback
+	local tree = parser:parse()[1]
+	local root = tree:root()
+	local node = root:descendant_for_range(row, col, row, col)
+
+	-- Get the current line for fallback
+	local line_text = vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false)[1] or ""
+
+	while node do
+		local node_type = node:type()
+
+		-- Check for conditional statements
+		if node_type == "if_statement" or node_type == "if_expression" or node_type == "conditional_expression" then
+			return "if", extract_condition_from_node(node, bufnr)
+		end
+
+		-- Check for function definitions
+		if
+			node_type:match("function")
+			or node_type == "func_declaration"
+			or node_type == "function_declaration"
+			or node_type == "function_definition"
+			or node_type == "function_item"
+		then
+			local func_name = extract_function_name(node, bufnr)
+			if func_name then
+				return "function", func_name
+			end
+		end
+
+		-- Check for variable declarations
+		if
+			node_type == "variable_declaration"
+			or node_type == "let_declaration"
+			or node_type == "const_declaration"
+			or node_type == "var_declaration"
+			or node_type == "short_var_declaration"
+		then -- Go
+			local var_name = extract_variable_name(node, bufnr)
+			if var_name then
+				return "variable", var_name
+			end
+		end
+
+		node = node:parent()
+	end
+
 	return "line"
 end
 
 local function extract_condition()
-	local line_text = vim.fn.getline(".")
-	-- Extract condition from if statement - handles various formats
-	local condition = line_text:match("^%s*if%s+(.-)%s*{")
-		or line_text:match("^%s*if%s+(.-)%s*then")
-		or line_text:match("^%s*if%s+(.-)%s*$")
-		or line_text:match("^%s*if%s+(.-);")
+	local bufnr = vim.api.nvim_get_current_buf()
+	local cursor = vim.api.nvim_win_get_cursor(0)
+	local row, col = cursor[1] - 1, cursor[2]
 
-	if condition then
-		-- Clean up the condition - remove extra whitespace
-		condition = condition:match("^%s*(.-)%s*$")
-		return condition
+	local parser = vim.treesitter.get_parser(bufnr)
+	local tree = parser:parse()[1]
+	local root = tree:root()
+	local node = root:named_descendant_for_range(row, col, row, col) or root:descendant_for_range(row, col, row, col)
+
+	while node do
+		local t = node:type()
+		if t == "if_statement" or t == "if_expression" or t == "conditional_expression" then
+			return extract_condition_from_node(node, bufnr)
+		end
+		node = node:parent()
 	end
+
 	return nil
 end
 
