@@ -28,6 +28,9 @@ jest
 **Lua**:
 busted
 
+**Treesitter**:
+treesitter paterns for the given language
+
 ## Features:
 ### Run
 <img src="diagnostic_sign.png">
