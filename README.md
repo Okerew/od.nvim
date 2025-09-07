@@ -29,7 +29,7 @@ jest
 busted
 
 **Treesitter**:
-treesitter paterns for the given language
+treesitter parsers for the given language
 
 ## Features:
 ### Run
