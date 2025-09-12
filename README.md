@@ -177,7 +177,7 @@ vim.keymap.set("n", "<leader>orw", function() od:copy_clear_watchpoint() end, { 
 vim.keymap.set("n", "<leader>oat", function() od:copy_tracepoint() end, { desc = "Add tracepoint" })
 vim.keymap.set("n", "<leader>ort", function() od:copy_clear_tracepoint() end, { desc = "Remove tracepoint" })
 vim.keymap.set("n", "<leader>olp", function() od:load_breakpoints() end, { desc = "Load points" })
-vim.keymap.set("n", "<leader>osp", function() od:save_breakpoints() end, { desc = "Saves points" })
+vim.keymap.set("n", "<leader>oas", function() od:save_breakpoints() end, { desc = "Saves points" })
 
 -- Test integration for python, javascript/typepescript, lua
 vim.keymap.set("n", "<leader>otp", function() od:python_test() end, { desc = "Run Python Test" })
