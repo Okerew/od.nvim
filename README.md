@@ -7,7 +7,10 @@ testing framework. It's whole design point is also to run only on demand.
 
 ## Installation:
 To install use your preferred plugin manager I will use here vim plug for 
-example.
+example. 
+
+**Note** nvim notify doesn't have to be installed for the plugin to work it just looks nice.
+
 ```vim
 Plug 'nvim-telescope/telescope.nvim'
 Plug 'rcarriga/nvim-notify'
