@@ -1,4 +1,8 @@
-# OD (Onto Debug)
+<h1 style="display: flex; align-items: center;">
+  <img src="od.png" width="25" height="25">
+  Onto Debug
+</h1>
+
 Onto Debug is a neovim plugin designed to help debugging, testing
 (so debugging really) but not act as a full debugger protocol or a 
 testing framework. It's whole design point is also to run only on demand.
