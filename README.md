@@ -127,6 +127,10 @@ copies the command for removing a watchpoint depending on filetype.
 * `ODJestTest`: Runs a jest test with picker logic.
 * `ODBustedTest`: Runs a busted test with picker logic.
 
+**Show test errors/warnings:**
+* `ODTestErrors`: Shows the test error picker.
+* `ODTestWarnings`: Shows the test warning picker.
+
 ## Config
 If you just want to start using this plugin copy this config, keybindings are not needed to
 use OD, but are useful.
@@ -153,6 +157,8 @@ vim.g.rust_build_time_threshold = 60.0
 vim.keymap.set("n", "<leader>odr", function() od:debug() end, { desc = "Run debugger" })
 vim.keymap.set("n", "<leader>ode", function() od:show_errors() end, { desc = "Show errors" })
 vim.keymap.set("n", "<leader>odw", function() od:show_warnings() end, { desc = "Show warnings" })
+vim.keymap.set("n", "<leader>ote", function() od:show_test_errors() end, { desc = "Show test errors" })
+vim.keymap.set("n", "<leader>otw", function() od:show_test_warnings() end, { desc = "Show test warnings" })
 vim.keymap.set("n", "<leader>odo", function() od:show_output() end, { desc = "Show output" })
 vim.keymap.set("n", "<leader>oci", function() od:clear_telescope_items() end, { desc = "Clear Items" })
 vim.keymap.set("n", "<leader>os", function() od:show_suspicious_variables() end, { desc = "Shows suspicious variables" })
