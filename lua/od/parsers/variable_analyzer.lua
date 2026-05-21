@@ -22,10 +22,6 @@ local function get_parser()
     local lang = get_language()
     local buf = vim.api.nvim_get_current_buf()
 
-    if not pcall(require, "nvim-treesitter.parsers") then
-        return nil, "Treesitter not available"
-    end
-
     local ok, parser = pcall(vim.treesitter.get_parser, buf, lang)
     if not ok then
         return nil, "Parser not available for " .. lang
