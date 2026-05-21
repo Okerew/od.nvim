@@ -18,7 +18,6 @@ example.
 ```vim
 Plug 'nvim-telescope/telescope.nvim'
 Plug 'rcarriga/nvim-notify'
-Plug 'nvim-treesitter/nvim-treesitter'
 Plug 'Okerew/od.nvim'
 ```
 ### Also depending on the language you need these tools:
