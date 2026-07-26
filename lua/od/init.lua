@@ -1505,32 +1505,107 @@ function M.ctest()
     run_test("c", M.test_handlers.c)
 end
 
-local function find_cmake_executables()
-    local project_root = find_cmake_project_root()
-    if not project_root then
-        return {}
+local function find_executables()
+    local cwd = vim.fn.getcwd()
+
+    local markers = {
+        "CMakeLists.txt", "Cargo.toml", "Makefile", "makefile"
+    }
+    local project_root = cwd
+    local dir = cwd
+    local found = false
+    while dir ~= "/" and not found do
+        for _, m in ipairs(markers) do
+            if vim.fn.filereadable(dir .. "/" .. m) == 1 then
+                project_root = dir
+                found = true
+                break
+            end
+        end
+        if not found then
+            dir = vim.fn.fnamemodify(dir, ":h")
+        end
     end
 
     local executables = {}
-    local build_dir = project_root .. "/build"
+    local seen = {}
 
-    -- Look for executables in build directory
-    if vim.fn.isdirectory(build_dir) == 1 then
-        local handle = vim.loop.fs_scandir(build_dir)
-        if handle then
-            while true do
-                local name, type = vim.loop.fs_scandir_next(handle)
-                if not name then
-                    break
-                end
+    local function add(path, name)
+        if name:match("%.") then
+            return
+        end
+        if vim.fn.executable(path) ~= 1 then
+            return
+        end
+        if not seen[path] then
+            seen[path] = true
+            table.insert(executables, path)
+        end
+    end
 
-                if type == "file" then
-                    local file_path = build_dir .. "/" .. name
-                    -- Check if file is executable (basic check)
-                    if vim.fn.executable(file_path) == 1 and not name:match("%.") then
-                        table.insert(executables, file_path)
-                    end
+    -- Dirs that only hold build internals or deps, never our binaries
+    local skip = {
+        ["CMakeFiles"] = true,
+        [".cmake"] = true,
+        ["deps"] = true,
+        ["incremental"] = true,
+        [".fingerprint"] = true,
+        [".git"] = true,
+    }
+
+    local function scan(dir, depth)
+        if depth > 4 then
+            return
+        end
+
+        local handle = vim.loop.fs_scandir(dir)
+        if not handle then
+            return
+        end
+
+        while true do
+            local name, type = vim.loop.fs_scandir_next(handle)
+            if not name then
+                break
+            end
+
+            local path = dir .. "/" .. name
+
+            if type == "directory" then
+                if not skip[name] then
+                    scan(path, depth + 1)
                 end
+            elseif type == "file" then
+                add(path, name)
+            end
+        end
+    end
+
+    -- Recurse into known build output dirs...
+    local search_dirs = {
+        project_root .. "/build",
+        project_root .. "/target/debug",
+        project_root .. "/target/release",
+        project_root .. "/bin",
+        project_root .. "/out",
+    }
+    for _, d in ipairs(search_dirs) do
+        if vim.fn.isdirectory(d) == 1 then
+            scan(d, 0)
+        end
+    end
+
+    -- ...and check the project root top-level for plain Makefile/manual
+    -- builds that drop binaries next to the Makefile
+    local handle = vim.loop.fs_scandir(project_root)
+    if handle then
+        while true do
+            local name, type = vim.loop.fs_scandir_next(handle)
+            if not name then
+                break
+            end
+            if type == "file" then
+                add(project_root .. "/" .. name, name)
             end
         end
     end
@@ -1723,7 +1798,7 @@ function M.gdb_debug()
 
     -- Find executable to debug
     local executable = nil
-    local executables = find_cmake_executables()
+    local executables = find_executables()
 
     if #executables == 0 then
         -- Fallback to looking for debug_program
@@ -1835,7 +1910,7 @@ function M.gdb_remote()
 
     -- Find executable for symbols
     local executable = nil
-    local executables = find_cmake_executables()
+    local executables = find_executables()
 
     if #executables == 1 then
         executable = executables[1]
@@ -1941,7 +2016,7 @@ function M.lldb_debug()
     end
 
     local executable = nil
-    local executables = find_cmake_executables()
+    local executables = find_executables()
 
     if #executables == 0 then
         local debug_program = vim.fn.getcwd() .. "/debug_program"
@@ -2049,7 +2124,7 @@ function M.lldb_remote()
     end
 
     local executable = nil
-    local executables = find_cmake_executables()
+    local executables = find_executables()
 
     if #executables == 1 then
         executable = executables[1]
