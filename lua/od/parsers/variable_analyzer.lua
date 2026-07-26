@@ -1,21 +1,20 @@
 local M = {}
 
+M.lang_map = {
+    c = "c",
+    cpp = "cpp",
+    rust = "rust",
+    go = "go",
+    python = "python",
+    lua = "lua",
+    javascript = "javascript",
+    typescript = "typescript",
+}
+
 local function get_language()
     local buf = vim.api.nvim_get_current_buf()
     local ft = vim.api.nvim_buf_get_option(buf, "filetype")
-
-    local lang_map = {
-        c = "c",
-        cpp = "cpp",
-        rust = "rust",
-        go = "go",
-        python = "python",
-        lua = "lua",
-        javascript = "javascript",
-        typescript = "typescript",
-    }
-
-    return lang_map[ft] or "c"
+    return M.lang_map[ft] or "c"
 end
 
 local function get_parser()
@@ -30,7 +29,7 @@ local function get_parser()
     return parser, nil
 end
 
-local value_patterns = {
+M.value_patterns = {
     overflow = {
         "4294967295",
         "18446744073709551615",
@@ -352,10 +351,6 @@ local value_patterns = {
         "auth",
         "admin",
         "root",
-        "debug",
-        "test",
-        "temp",
-        "tmp",
         "backdoor",
         "exploit",
         "payload",
@@ -539,6 +534,43 @@ local value_patterns = {
     },
 }
 
+M.queries = {}
+M.function_queries = {}
+M.suspicious_ops = {
+    { pattern = "malloc%s*%(%s*0%s*%)",                    type = "zero_allocation" },
+    { pattern = "free%s*%(%s*0x0%s*%)",                    type = "null_free" },
+    { pattern = "memcpy%s*%([^,]*,%s*[^,]*,%s*0xffffffff", type = "overflow_copy" },
+    { pattern = "strcpy%s*%([^,]*,%s*[^)]*0x",             type = "hex_string_copy" },
+    { pattern = "return%s+0xdeadbeef",                     type = "suspicious_return" },
+    { pattern = "return%s+0xbaadf00d",                     type = "suspicious_return" },
+    { pattern = "return%s+%-1",                            type = "error_return" },
+    { pattern = "goto%s+[%w_]*error",                      type = "error_handling" },
+}
+M.buffer_ops = {
+    "strcpy", "strcat", "sprintf", "gets", "scanf"
+}
+M.suspicious_lib_funcs = {
+    malloc = "dynamic_allocation",
+    free = "memory_management",
+    system = "command_execution",
+    exec = "command_execution",
+    gets = "unsafe_input",
+    strcpy = "unsafe_copy",
+    sprintf = "unsafe_formatting",
+}
+M.tracking_patterns = {
+    "Variable%s+'([%w_]+)'%s+changed%s+to:%s+([%w%-%+%.x]+)%s+at%s+line%s+(%d+)",
+    "([%w_]+)%s+=%s+(.-)%s+=%s+([%w%-%+%.x]+)%s+at%s+line%s+(%d+)",
+    "Overflow%s+detected%s+in%s+([%w_]+):%s+([%w%-%+%.x]+)%s+->%s+([%w%-%+%.x]+)%s+at%s+line%s+(%d+)",
+    "Underflow%s+detected%s+in%s+([%w_]+):%s+([%w%-%+%.x]+)%s+->%s+([%w%-%+%.x]+)%s+at%s+line%s+(%d+)",
+    "Expression%s+'([^']+)'%s+in%s+([%w_]+)%s+evaluated%s+to:%s+([%w%-%+%.x]+)%s+at%s+line%s+(%d+)",
+}
+M.corruption_patterns = {
+    "Variable%s+([%w_]+)%s+corrupted%s+from%s+([%w%-%+%.x]+)%s+to%s+([%w%-%+%.x]+)",
+    "Memory%s+corruption%s+detected%s+in%s+([%w_]+)%s+at%s+([%w%-%+%.x]+)",
+    "Stack%s+variable%s+([%w_]+)%s+overwritten%s+with%s+([%w%-%+%.x]+)"
+}
+
 local function evaluate_math_expression(expr, variable_values)
     -- Simple math expression evaluator with variable substitution
     local function substitute_variables(expression)
@@ -719,7 +751,7 @@ function M.analyze_math_expressions(variables)
             local result_str = string.format("%.0f", result)
             local result_hex = string.format("0x%x", math.floor(math.abs(result)))
 
-            for ptype, patterns in pairs(value_patterns) do
+            for ptype, patterns in pairs(M.value_patterns) do
                 if ptype ~= "anti_magic_numbers" and ptype ~= "magic_number_patterns" then
                     for _, pattern in ipairs(patterns) do
                         local pattern_str = tostring(pattern)
@@ -780,7 +812,7 @@ function M.monitor_variable_assignments(variables)
 
         -- Only monitor if initial value was "normal"
         local is_initially_suspicious = false
-        for ptype, patterns in pairs(value_patterns) do
+        for ptype, patterns in pairs(M.value_patterns) do
             if ptype ~= "anti_magic_numbers" and ptype ~= "magic_number_patterns" then
                 for _, pattern in ipairs(patterns) do
                     if initial_value == pattern or
@@ -822,8 +854,10 @@ function M.analyze_function_sources(variables, output)
 
         local functions = {}
 
-        local function_queries = {
-            c = [[
+        if not M._fqueries_loaded then
+            M._fqueries_loaded = true
+            local fq = {
+                c = [[
                 (function_definition
                     declarator: (function_declarator
                         declarator: (identifier) @func_name)
@@ -835,8 +869,7 @@ function M.analyze_function_sources(variables, output)
                             declarator: (identifier) @func_name))
                     body: (compound_statement) @func_body) @function
             ]],
-
-            cpp = [[
+                cpp = [[
                 (function_definition
                     declarator: (function_declarator
                         declarator: (identifier) @func_name)
@@ -848,14 +881,12 @@ function M.analyze_function_sources(variables, output)
                             declarator: (identifier) @func_name))
                     body: (compound_statement) @func_body) @function
             ]],
-
-            python = [[
+                python = [[
                 (function_definition
                     name: (identifier) @func_name
                     body: (_) @func_body) @function
             ]],
-
-            javascript = [[
+                javascript = [[
                 (function_declaration
                     name: (identifier) @func_name
                     body: (statement_block) @func_body) @function
@@ -864,21 +895,25 @@ function M.analyze_function_sources(variables, output)
                     name: (identifier) @func_name
                     body: (statement_block) @func_body) @function
             ]],
-
-            go = [[
+                go = [[
                 (function_declaration
                     name: (identifier) @func_name
                     body: (block) @func_body) @function
             ]],
-
-            rust = [[
+                rust = [[
                 (function_item
                     name: (identifier) @func_name
                     body: (block) @func_body) @function
             ]],
-        }
+            }
+            for k, v in pairs(fq) do
+                if M.function_queries[k] == nil then
+                    M.function_queries[k] = v
+                end
+            end
+        end
 
-        local query_string = function_queries[lang]
+        local query_string = M.function_queries[lang]
         if not query_string then
             return functions, "No function query for language: " .. lang
         end
@@ -931,7 +966,7 @@ function M.analyze_function_sources(variables, output)
         local body = func_info.body
 
         -- Check for hardcoded suspicious values in function
-        for pattern_type, patterns in pairs(value_patterns) do
+        for pattern_type, patterns in pairs(M.value_patterns) do
             if pattern_type ~= "anti_magic_numbers" and pattern_type ~= "magic_number_patterns" then
                 for _, pattern in ipairs(patterns) do
                     for match in body:gmatch(pattern) do
@@ -948,18 +983,7 @@ function M.analyze_function_sources(variables, output)
         end
 
         -- Check for suspicious operations
-        local suspicious_ops = {
-            { pattern = "malloc%s*%(%s*0%s*%)",                    type = "zero_allocation" },
-            { pattern = "free%s*%(%s*0x0%s*%)",                    type = "null_free" },
-            { pattern = "memcpy%s*%([^,]*,%s*[^,]*,%s*0xffffffff", type = "overflow_copy" },
-            { pattern = "strcpy%s*%([^,]*,%s*[^)]*0x",             type = "hex_string_copy" },
-            { pattern = "return%s+0xdeadbeef",                     type = "suspicious_return" },
-            { pattern = "return%s+0xbaadf00d",                     type = "suspicious_return" },
-            { pattern = "return%s+%-1",                            type = "error_return" },
-            { pattern = "goto%s+[%w_]*error",                      type = "error_handling" },
-        }
-
-        for _, op in ipairs(suspicious_ops) do
+        for _, op in ipairs(M.suspicious_ops) do
             for match in body:gmatch(op.pattern) do
                 table.insert(body_issues, {
                     type = op.type,
@@ -971,11 +995,7 @@ function M.analyze_function_sources(variables, output)
         end
 
         -- Check for buffer operations without bounds checking
-        local buffer_ops = {
-            "strcpy", "strcat", "sprintf", "gets", "scanf"
-        }
-
-        for _, op in ipairs(buffer_ops) do
+        for _, op in ipairs(M.buffer_ops) do
             if body:find(op) and not body:find("strlen") and not body:find("sizeof") then
                 table.insert(body_issues, {
                     type = "unchecked_buffer_operation",
@@ -1057,17 +1077,7 @@ function M.analyze_function_sources(variables, output)
             end
         else
             -- Check if it's a library function that might be suspicious
-            local suspicious_lib_funcs = {
-                malloc = "dynamic_allocation",
-                free = "memory_management",
-                system = "command_execution",
-                exec = "command_execution",
-                gets = "unsafe_input",
-                strcpy = "unsafe_copy",
-                sprintf = "unsafe_formatting",
-            }
-
-            local suspicion_type = suspicious_lib_funcs[func_name]
+            local suspicion_type = M.suspicious_lib_funcs[func_name]
             if suspicion_type then
                 table.insert(function_issues, {
                     type = "suspicious_library_call",
@@ -1109,16 +1119,8 @@ end
 function M.track_variable_changes(debug_output)
     local runtime_changes = {}
 
-    local tracking_patterns = {
-        "Variable%s+'([%w_]+)'%s+changed%s+to:%s+([%w%-%+%.x]+)%s+at%s+line%s+(%d+)",
-        "([%w_]+)%s+=%s+(.-)%s+=%s+([%w%-%+%.x]+)%s+at%s+line%s+(%d+)",
-        "Overflow%s+detected%s+in%s+([%w_]+):%s+([%w%-%+%.x]+)%s+->%s+([%w%-%+%.x]+)%s+at%s+line%s+(%d+)",
-        "Underflow%s+detected%s+in%s+([%w_]+):%s+([%w%-%+%.x]+)%s+->%s+([%w%-%+%.x]+)%s+at%s+line%s+(%d+)",
-        "Expression%s+'([^']+)'%s+in%s+([%w_]+)%s+evaluated%s+to:%s+([%w%-%+%.x]+)%s+at%s+line%s+(%d+)",
-    }
-
     for line in debug_output:gmatch("[^\r\n]+") do
-        for _, pattern in ipairs(tracking_patterns) do
+        for _, pattern in ipairs(M.tracking_patterns) do
             local matches = { line:match(pattern) }
             if #matches > 0 then
                 local var_name, new_value, line_num
@@ -1154,7 +1156,7 @@ function M.track_variable_changes(debug_output)
                     local numeric_value = tonumber(new_value) or
                         tonumber(new_value:gsub("0x", ""), 16)
 
-                    for ptype, ppatterns in pairs(value_patterns) do
+                    for ptype, ppatterns in pairs(M.value_patterns) do
                         if ptype ~= "anti_magic_numbers" and
                             ptype ~= "magic_number_patterns" then
                             for _, ppattern in ipairs(ppatterns) do
@@ -1404,13 +1406,7 @@ function M.analyze_runtime_patterns(output, variables)
     end
 
     -- Monitor for value corruption patterns in output
-    local corruption_patterns = {
-        "Variable%s+([%w_]+)%s+corrupted%s+from%s+([%w%-%+%.x]+)%s+to%s+([%w%-%+%.x]+)",
-        "Memory%s+corruption%s+detected%s+in%s+([%w_]+)%s+at%s+([%w%-%+%.x]+)",
-        "Stack%s+variable%s+([%w_]+)%s+overwritten%s+with%s+([%w%-%+%.x]+)"
-    }
-
-    for _, pattern in ipairs(corruption_patterns) do
+    for _, pattern in ipairs(M.corruption_patterns) do
         for match in output:gmatch(pattern) do
             local parts = { match:match(pattern) }
             if #parts >= 2 then
@@ -1418,7 +1414,7 @@ function M.analyze_runtime_patterns(output, variables)
                 local corrupted_value = parts[#parts]
 
                 -- Check if corrupted value is suspicious
-                for ptype, ppatterns in pairs(value_patterns) do
+                for ptype, ppatterns in pairs(M.value_patterns) do
                     if ptype ~= "anti_magic_numbers" and ptype ~= "magic_number_patterns" then
                         for _, ppattern in ipairs(ppatterns) do
                             if corrupted_value == ppattern or corrupted_value:match(ppattern) then
@@ -1520,8 +1516,10 @@ function M.analyze_suspicious_patterns(output)
             debug_info = {}, -- For debugging line mappings
         }
 
-        local queries = {
-            c = [[
+        if not M._queries_loaded then
+            M._queries_loaded = true
+            local qs = {
+                c = [[
 				(assignment_expression
 					left: (identifier) @var
 					right: (_) @value) @assignment
@@ -1536,8 +1534,7 @@ function M.analyze_suspicious_patterns(output)
 				
 				(identifier) @identifier
 			]],
-
-            cpp = [[
+                cpp = [[
 				(assignment_expression
 					left: (identifier) @var
 					right: (_) @value) @assignment
@@ -1552,8 +1549,7 @@ function M.analyze_suspicious_patterns(output)
 				
 				(identifier) @identifier
 			]],
-
-            rust = [[
+                rust = [[
 				(assignment_expression
 					left: (identifier) @var
 					right: (_) @value) @assignment
@@ -1568,8 +1564,7 @@ function M.analyze_suspicious_patterns(output)
 				
 				(identifier) @identifier
 			]],
-
-            go = [[
+                go = [[
 				(assignment_statement
 					left: (expression_list (identifier) @var)
 					right: (_) @value) @assignment
@@ -1584,8 +1579,7 @@ function M.analyze_suspicious_patterns(output)
 				
 				(identifier) @identifier
 			]],
-
-            python = [[
+                python = [[
 				(assignment
 					left: (identifier) @var
 					right: (_) @value) @assignment
@@ -1596,8 +1590,7 @@ function M.analyze_suspicious_patterns(output)
 				
 				(identifier) @identifier
 			]],
-
-            lua = [[
+                lua = [[
 				(assignment_statement
 					(variable_list (identifier) @var)
 					(expression_list (_) @value)) @assignment
@@ -1612,8 +1605,7 @@ function M.analyze_suspicious_patterns(output)
 				
 				(identifier) @identifier
 			]],
-
-            javascript = [[
+                javascript = [[
 				(assignment_expression
 					left: (identifier) @var
 					right: (_) @value) @assignment
@@ -1628,9 +1620,15 @@ function M.analyze_suspicious_patterns(output)
 				
 				(identifier) @identifier
 			]],
-        }
+            }
+            for k, v in pairs(qs) do
+                if M.queries[k] == nil then
+                    M.queries[k] = v
+                end
+            end
+        end
 
-        local query_string = queries[lang]
+        local query_string = M.queries[lang]
         if not query_string then
             return variables, "No query available for language: " .. lang
         end
@@ -1839,7 +1837,7 @@ function M.analyze_suspicious_patterns(output)
                     goto continue
                 end
 
-                for category, values in pairs(value_patterns.anti_magic_numbers) do
+                for category, values in pairs(M.value_patterns.anti_magic_numbers) do
                     for _, magic_val in ipairs(values) do
                         if numeric_value == magic_val then
                             table.insert(magic_issues, {
@@ -1856,7 +1854,7 @@ function M.analyze_suspicious_patterns(output)
                     end
                 end
 
-                for pattern_name, pattern in pairs(value_patterns.magic_number_patterns) do
+                for pattern_name, pattern in pairs(M.value_patterns.magic_number_patterns) do
                     if numeric_value:match(pattern) then
                         table.insert(magic_issues, {
                             type = "magic_pattern",
@@ -1883,7 +1881,7 @@ function M.analyze_suspicious_patterns(output)
                     goto continue_expr
                 end
 
-                for category, values in pairs(value_patterns.anti_magic_numbers) do
+                for category, values in pairs(M.value_patterns.anti_magic_numbers) do
                     for _, check_val in ipairs(values) do
                         if magic_val == check_val then
                             table.insert(magic_issues, {
@@ -1946,18 +1944,18 @@ function M.analyze_suspicious_patterns(output)
             end
         end
 
-        -- Check function calls - be more precise
+        -- Check function calls - require the value in the source line
         for var_name, call_info in pairs(variables.function_calls) do
             local source_line = call_info.source_line
-            if source_line:find(var_name, 1, true) and source_line:find(call_info.function_name, 1, true) then
-                -- Only consider if the suspicious value appears in nearby output context
-                -- This is more conservative than the original heuristic
+            if source_line:find(var_name, 1, true)
+                and source_line:find(call_info.function_name, 1, true)
+                and source_line:find(suspicious_value, 1, true) then
                 table.insert(candidates, {
                     type = "function_call",
                     variable = var_name,
                     line = call_info.line,
                     function_name = call_info.function_name,
-                    confidence = 1, -- Lower confidence
+                    confidence = 1,
                     source_line = source_line,
                 })
             end
@@ -1980,7 +1978,10 @@ function M.analyze_suspicious_patterns(output)
 
         -- Sort by confidence and return the best match
         table.sort(candidates, function(a, b)
-            return a.confidence > b.confidence
+            if a.confidence ~= b.confidence then
+                return a.confidence > b.confidence
+            end
+            return a.line < b.line
         end)
 
         return candidates[1] -- Return the best candidate, or nil if none found
@@ -2054,13 +2055,22 @@ function M.analyze_suspicious_patterns(output)
     end
 
     -- Analyze output for suspicious patterns
-    for pattern_type, patterns in pairs(value_patterns) do
+    local function is_alphanumeric_only(p)
+        return p:match("^[%w]+$") ~= nil
+    end
+
+    for pattern_type, patterns in pairs(M.value_patterns) do
         for _, pattern in ipairs(patterns) do
             local matches = {}
 
             if pattern_type == "memory_leak" then
                 for match in output:gmatch(pattern) do
                     table.insert(matches, match)
+                end
+            elseif is_alphanumeric_only(pattern) then
+                local escaped = vim.pesc(pattern)
+                if output:find("%f[%w]" .. escaped .. "%f[%W]") then
+                    table.insert(matches, pattern)
                 end
             else
                 if output:find(pattern, 1, true) then
@@ -2133,6 +2143,45 @@ function M.analyze_suspicious_patterns(output)
     end
 
     return suspicious
+end
+
+function M.add_value_pattern(category, pattern)
+    M.value_patterns[category] = M.value_patterns[category] or {}
+    table.insert(M.value_patterns[category], pattern)
+end
+
+function M.add_suspicious_op(op)
+    table.insert(M.suspicious_ops, op)
+end
+
+function M.add_buffer_op(op)
+    table.insert(M.buffer_ops, op)
+end
+
+function M.add_suspicious_lib_func(name, suspicion_type)
+    M.suspicious_lib_funcs[name] = suspicion_type
+end
+
+function M.add_tracking_pattern(pattern)
+    table.insert(M.tracking_patterns, pattern)
+end
+
+function M.add_corruption_pattern(pattern)
+    table.insert(M.corruption_patterns, pattern)
+end
+
+function M.register_language(lang, opts)
+    if opts.filetypes then
+        for _, ft in ipairs(opts.filetypes) do
+            M.lang_map[ft] = lang
+        end
+    end
+    if opts.query then
+        M.queries[lang] = opts.query
+    end
+    if opts.function_query then
+        M.function_queries[lang] = opts.function_query
+    end
 end
 
 return M
