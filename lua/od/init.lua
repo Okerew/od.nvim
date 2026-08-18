@@ -18,6 +18,14 @@ M.last_output = ""
 M.breakpoints = {}
 M.sign_id_counter = 1
 
+function M.has_treesitter()
+    if not vim.treesitter or not vim.treesitter.get_parser then
+        return false
+    end
+    local buf = vim.api.nvim_get_current_buf()
+    return pcall(vim.treesitter.get_parser, buf)
+end
+
 M.config = {
     debuggers = {
         c = {
@@ -92,7 +100,8 @@ M.config = {
         cpp = { "*.cpp", "*.cxx", "*.cc" },
         go = { "main.go", "*.go" },
         rust = { "Cargo.toml", "src/main.rs", "src/lib.rs" }
-    }
+    },
+    suspicious_analysis_enabled = true
 }
 
 local function place_suspicious_signs(suspicious_items)
@@ -117,6 +126,19 @@ local function place_suspicious_signs(suspicious_items)
             end
         end
     end
+end
+
+local function run_suspicious_analysis(output)
+    if not M.config.suspicious_analysis_enabled then
+        M.suspicious_variables = {}
+        return
+    end
+    if not M.has_treesitter() then
+        M.suspicious_variables = {}
+        return
+    end
+    M.suspicious_variables = analyze_suspicious_patterns(output)
+    place_suspicious_signs(M.suspicious_variables)
 end
 
 function M.add_custom_debugger(lang, config)
@@ -557,8 +579,7 @@ function M.debug()
             local errors, warnings = parse_debug_output(output, filetype)
             M.last_errors = errors
             M.last_warnings = warnings
-            M.suspicious_variables = analyze_suspicious_patterns(output)
-            place_suspicious_signs(M.suspicious_variables)
+            run_suspicious_analysis(output)
 
             if #M.suspicious_variables > 0 then
                 vim.notify(string.format("Found %d suspicious patterns", #M.suspicious_variables), vim.log.levels.WARN)
@@ -616,8 +637,7 @@ function M.rust_clippy()
                 local errors, warnings = parse_debug_output(full_output, "rust")
                 M.last_errors = errors
                 M.last_warnings = warnings
-                M.suspicious_variables = analyze_suspicious_patterns(output)
-                place_suspicious_signs(M.suspicious_variables)
+                run_suspicious_analysis(output)
 
                 if #M.suspicious_variables > 0 then
                     vim.notify(
@@ -706,8 +726,7 @@ function M.go_build()
                 local errors, warnings = parse_debug_output(full_output, "go")
                 M.last_errors = errors
                 M.last_warnings = warnings
-                M.suspicious_variables = analyze_suspicious_patterns(output)
-                place_suspicious_signs(M.suspicious_variables)
+                run_suspicious_analysis(output)
 
                 if #M.suspicious_variables > 0 then
                     vim.notify(
@@ -843,6 +862,9 @@ local function attach_log(items, full_output)
 end
 
 local function get_current_function()
+    if not M.has_treesitter() then
+        return nil
+    end
     local bufnr = vim.api.nvim_get_current_buf()
     local cursor = vim.api.nvim_win_get_cursor(0)
     local row, col = cursor[1] - 1, cursor[2] -- Convert to 0-based indexing
@@ -962,9 +984,7 @@ local function run_test(filetype, handler)
                 full_output)
             M.last_errors = errors
             M.last_warnings = warnings
-            M.suspicious_variables =
-                analyze_suspicious_patterns(output)
-            place_suspicious_signs(M.suspicious_variables)
+            run_suspicious_analysis(output)
             if #M.suspicious_variables > 0 then
                 vim.notify(string.format(
                         "Found %d suspicious patterns",
@@ -1676,8 +1696,7 @@ function M.cmake_configure()
                 local errors, warnings = parse_debug_output(full_output, filetype)
                 M.last_errors = errors
                 M.last_warnings = warnings
-                M.suspicious_variables = analyze_suspicious_patterns(output)
-                place_suspicious_signs(M.suspicious_variables)
+                run_suspicious_analysis(output)
 
                 if #M.suspicious_variables > 0 then
                     vim.notify(
@@ -1759,8 +1778,7 @@ function M.cmake_build()
                 local errors, warnings = parse_debug_output(full_output, filetype)
                 M.last_errors = errors
                 M.last_warnings = warnings
-                M.suspicious_variables = analyze_suspicious_patterns(output)
-                place_suspicious_signs(M.suspicious_variables)
+                run_suspicious_analysis(output)
 
                 if #M.suspicious_variables > 0 then
                     vim.notify(
@@ -1867,8 +1885,7 @@ function M.gdb_debug_executable(executable)
                 local errors, warnings = parse_debug_output(full_output, filetype)
                 M.last_errors = errors
                 M.last_warnings = warnings
-                M.suspicious_variables = analyze_suspicious_patterns(output)
-                place_suspicious_signs(M.suspicious_variables)
+                run_suspicious_analysis(output)
 
                 if #M.suspicious_variables > 0 then
                     vim.notify(
@@ -1980,8 +1997,7 @@ function M.gdb_remote_executable(executable, target)
                 local errors, warnings = parse_debug_output(full_output, filetype)
                 M.last_errors = errors
                 M.last_warnings = warnings
-                M.suspicious_variables = analyze_suspicious_patterns(output)
-                place_suspicious_signs(M.suspicious_variables)
+                run_suspicious_analysis(output)
 
                 if #M.suspicious_variables > 0 then
                     vim.notify(
@@ -2083,8 +2099,7 @@ function M.lldb_debug_executable(executable)
                 local errors, warnings = parse_debug_output(full_output, filetype)
                 M.last_errors = errors
                 M.last_warnings = warnings
-                M.suspicious_variables = analyze_suspicious_patterns(output)
-                place_suspicious_signs(M.suspicious_variables)
+                run_suspicious_analysis(output)
 
                 if #M.suspicious_variables > 0 then
                     vim.notify(
@@ -2192,8 +2207,7 @@ function M.lldb_remote_executable(executable, target)
                 local errors, warnings = parse_debug_output(full_output, filetype)
                 M.last_errors = errors
                 M.last_warnings = warnings
-                M.suspicious_variables = analyze_suspicious_patterns(output)
-                place_suspicious_signs(M.suspicious_variables)
+                run_suspicious_analysis(output)
 
                 if #M.suspicious_variables > 0 then
                     vim.notify(
@@ -2263,6 +2277,9 @@ local function extract_variable_name(node, bufnr)
 end
 
 local function get_context()
+    if not M.has_treesitter() then
+        return "line"
+    end
     local bufnr = vim.api.nvim_get_current_buf()
     local cursor = vim.api.nvim_win_get_cursor(0)
     local row, col = cursor[1] - 1, cursor[2]
@@ -2318,6 +2335,9 @@ local function get_context()
 end
 
 local function extract_condition()
+    if not M.has_treesitter() then
+        return nil
+    end
     local bufnr = vim.api.nvim_get_current_buf()
     local cursor = vim.api.nvim_win_get_cursor(0)
     local row, col = cursor[1] - 1, cursor[2]
